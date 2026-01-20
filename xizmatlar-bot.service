@@ -1,0 +1,47 @@
+# Systemd Service Configuration
+# Linux server'da bot-ni service sifatida ishga tushirish
+
+# File: /etc/systemd/system/xizmatlar-bot.service
+
+[Unit]
+Description=Xizmatlar Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/xizmatlar
+Environment="PATH=/path/to/xizmatlar/venv/bin"
+ExecStart=/path/to/xizmatlar/venv/bin/python main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/xizmatlar-bot/output.log
+StandardError=append:/var/log/xizmatlar-bot/error.log
+
+[Install]
+WantedBy=multi-user.target
+
+# Setup commands:
+# 1. Copy this file to /etc/systemd/system/
+# sudo cp xizmatlar-bot.service /etc/systemd/system/
+
+# 2. Reload systemd
+# sudo systemctl daemon-reload
+
+# 3. Enable on boot
+# sudo systemctl enable xizmatlar-bot
+
+# 4. Start service
+# sudo systemctl start xizmatlar-bot
+
+# 5. Check status
+# sudo systemctl status xizmatlar-bot
+
+# 6. View logs
+# sudo journalctl -u xizmatlar-bot -f
+
+# 7. Stop service
+# sudo systemctl stop xizmatlar-bot
+
+# 8. Restart service
+# sudo systemctl restart xizmatlar-bot

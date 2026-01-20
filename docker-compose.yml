@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # Xizmatlar Bot
+  bot:
+    build: .
+    container_name: xizmatlar_bot
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - CHANNEL_ID=${CHANNEL_ID}
+      - DRIVERS_GROUP_ID=${DRIVERS_GROUP_ID}
+      - PASSENGERS_GROUP_ID=${PASSENGERS_GROUP_ID}
+      - DRIVERS_ORDERS_GROUP_ID=${DRIVERS_ORDERS_GROUP_ID}
+      - DATABASE_URL=postgresql+psycopg2://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - xizmatlar_network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: xizmatlar_db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - xizmatlar_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: xizmatlar_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - xizmatlar_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PgAdmin (optional, for database management)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: xizmatlar_pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - xizmatlar_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  xizmatlar_network:
+    driver: bridge
