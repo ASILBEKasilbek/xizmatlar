@@ -1,29 +1,17 @@
 """
-Admin Panel Handlers
-Admin komandalarini boshqarish va statistika
+Admin handler - Admin panel va statistika
 """
-
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.filters import Command
-from sqlalchemy.orm import Session
 import logging
-from datetime import datetime, timedelta
-import re
-
-from config import config, UserRole
-from states import AdminState
-from keyboards import get_admin_menu_keyboard, get_back_button, format_statistics
-from crud import (
-    get_user_by_telegram_id,
-    get_daily_stats,
-    get_orders_by_date,
-    get_all_drivers,
-    get_all_passengers,
-    log_admin_action
-)
-from database import Order, OrderStatus
+from datetime import date, datetime
+from aiogram import Router, F
+from aiogram.filters import Command
+from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from database import get_db, db_manager
+from keyboards import admin_keyboard, services_keyboard
+from utils import format_date
+from states import AdminStates
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -31,224 +19,251 @@ router = Router()
 
 
 def is_admin(user_id: int) -> bool:
-    """Admin tekshirish"""
+    """Admin ekanligini tekshirish"""
     return user_id in config.ADMIN_IDS
 
 
 @router.message(Command("admin"))
-async def admin_command(message: Message, db: Session):
-    """Admin paneli"""
-    
-    if not is_admin(message.from_user.id):
-        await message.answer("❌ Siz admin emassiz!")
-        return
-    
-    admin_user = get_user_by_telegram_id(db, message.from_user.id)
-    
-    welcome_text = (
-        "👨‍💼 <b>Admin Paneli</b>\n\n"
-        f"Salom, admin {admin_user.first_name if admin_user else 'User'}!\n\n"
-        "Quyidagi amallarni tanlang:"
-    )
-    
-    await message.answer(
-        welcome_text,
-        reply_markup=get_admin_menu_keyboard()
-    )
-    
-    # Log
-    log_admin_action(db, message.from_user.id, "ADMIN_PANEL_OPENED")
-
-
-@router.callback_query(F.data == "admin_today_stats")
-async def today_stats(callback: CallbackQuery, db: Session):
-    """Bugungi statistika"""
-    await callback.answer()
-    
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Siz admin emassiz", show_alert=True)
-        return
-    
-    today = datetime.utcnow()
-    stats = get_daily_stats(db, today)
-    
-    stats_text = format_statistics(stats)
-    
-    await callback.message.edit_text(
-        f"📊 <b>Bugungi Statistika ({datetime.now().strftime('%d.%m.%Y')})</b>\n\n{stats_text}",
-        reply_markup=get_back_button()
-    )
-    
-    log_admin_action(db, callback.from_user.id, "VIEWED_TODAY_STATS")
-
-
-@router.callback_query(F.data == "admin_date_stats")
-async def date_stats_request(callback: CallbackQuery, state: FSMContext):
-    """Istalgan sana bo'yicha statistika"""
-    await callback.answer()
-    
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Siz admin emassiz", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "📅 <b>Sana Tanlang</b>\n\n"
-        "Format: <code>DD.MM.YYYY</code>\n"
-        "Masalan: <code>15.01.2026</code>",
-        reply_markup=None
-    )
-    
-    await state.set_state(AdminState.waiting_for_stat_date)
-
-
-@router.message(AdminState.waiting_for_stat_date)
-async def process_date_stats(message: Message, state: FSMContext, db: Session):
-    """Sana bo'yicha statistikani qayta ishlash"""
-    
-    if not is_admin(message.from_user.id):
-        await message.answer("❌ Siz admin emassiz!")
-        return
-    
-    date_str = message.text.strip()
-    
-    # Date format validatsiyasi
+async def cmd_admin(message: Message, state: FSMContext):
+    """Admin panel"""
     try:
-        stat_date = datetime.strptime(date_str, "%d.%m.%Y")
-    except ValueError:
-        await message.answer(
-            "❌ Noto'g'ri format!\n\n"
-            "To'g'ri format: <code>DD.MM.YYYY</code>\n"
-            "Masalan: <code>15.01.2026</code>"
+        if not is_admin(message.from_user.id):
+            await message.answer("❌ Sizda admin huquqlari yo'q!")
+            return
+        
+        await state.clear()
+        
+        text = (
+            "👨‍💼 <b>ADMIN PANEL</b>\n\n"
+            "Kerakli bo'limni tanlang:"
         )
-        return
+        await message.answer(text, reply_markup=admin_keyboard())
     
-    stats = get_daily_stats(db, stat_date)
-    stats_text = format_statistics(stats)
-    
-    await message.answer(
-        f"📊 <b>Statistika - {stat_date.strftime('%d.%m.%Y')}</b>\n\n{stats_text}",
-        reply_markup=get_back_button()
-    )
-    
-    await state.clear()
-    
-    log_admin_action(
-        db,
-        message.from_user.id,
-        "VIEWED_DATE_STATS",
-        f"Date: {date_str}"
-    )
+    except Exception as e:
+        logger.error(f"Error in cmd_admin: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 
-@router.callback_query(F.data == "admin_users_info")
-async def users_info(callback: CallbackQuery, db: Session):
-    """Foydalanuvchiler haqida ma'lumot"""
-    await callback.answer()
+@router.message(F.text == "📊 Bugungi statistika")
+async def today_stats_handler(message: Message, state: FSMContext):
+    """Bugungi statistika"""
+    try:
+        if not is_admin(message.from_user.id):
+            await message.answer("❌ Sizda admin huquqlari yo'q!")
+            return
+        
+        await state.clear()
+        
+        db = get_db()
+        try:
+            # Bugungi statistikani olish
+            stats_list = db_manager.get_daily_stats(db)
+            
+            if not stats_list:
+                await message.answer("📊 Bugun hali statistika yo'q.")
+                return
+            
+            # Umumiy hisoblar
+            total_orders = sum(s.orders_count for s in stats_list)
+            total_confirmed = sum(s.confirmed_count for s in stats_list)
+            total_rejected = sum(s.rejected_count for s in stats_list)
+            
+            # Yo'lovchilar statistikasi
+            passengers = [s for s in stats_list if s.user_type == "passenger"]
+            passengers.sort(key=lambda x: x.orders_count, reverse=True)
+            
+            # Haydovchilar statistikasi (tasdiqlangan)
+            drivers_confirmed = [s for s in stats_list if s.user_type == "driver"]
+            drivers_confirmed.sort(key=lambda x: x.confirmed_count, reverse=True)
+            
+            # Haydovchilar statistikasi (rad etilgan)
+            drivers_rejected = [s for s in stats_list if s.user_type == "driver"]
+            drivers_rejected.sort(key=lambda x: x.rejected_count, reverse=True)
+            
+            # Xabar yaratish
+            text = (
+                f"📊 <b>BUGUNGI STATISTIKA</b>\n"
+                f"📅 Sana: {date.today().strftime('%d.%m.%Y')}\n\n"
+                f"📈 <b>Umumiy:</b>\n"
+                f"• Buyurtmalar: {total_orders}\n"
+                f"• Tasdiqlangan: {total_confirmed}\n"
+                f"• Rad etilgan: {total_rejected}\n\n"
+            )
+            
+            # Yo'lovchilar
+            if passengers:
+                text += "🧍‍♂️ <b>Yo'lovchilar (buyurtmalar):</b>\n"
+                for s in passengers[:10]:  # Top 10
+                    text += f"• {s.user_name}: {s.orders_count} ta\n"
+                text += "\n"
+            
+            # Haydovchilar (tasdiqlangan)
+            if drivers_confirmed:
+                text += "🚖 <b>Haydovchilar (tasdiqlangan):</b>\n"
+                for s in drivers_confirmed[:10]:  # Top 10
+                    if s.confirmed_count > 0:
+                        text += f"• {s.user_name}: {s.confirmed_count} ta\n"
+                text += "\n"
+            
+            # Haydovchilar (rad etilgan)
+            if drivers_rejected:
+                rejected_list = [s for s in drivers_rejected if s.rejected_count > 0]
+                if rejected_list:
+                    text += "❌ <b>Haydovchilar (rad etilgan):</b>\n"
+                    for s in rejected_list[:10]:  # Top 10
+                        text += f"• {s.user_name}: {s.rejected_count} ta\n"
+            
+            await message.answer(text)
+        
+        finally:
+            db.close()
     
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Siz admin emassiz", show_alert=True)
-        return
-    
-    drivers = get_all_drivers(db)
-    passengers = get_all_passengers(db)
-    
-    users_text = (
-        f"👥 <b>Foydalanuvchiler Haqida Ma'lumot</b>\n\n"
-        f"🚖 <b>Haydovchilar:</b> {len(drivers)}\n"
-        f"🧍 <b>Yo'lovchilar:</b> {len(passengers)}\n"
-        f"👨‍💼 <b>Jami:</b> {len(drivers) + len(passengers)}\n\n"
-        f"<b>Eng faol haydovchilar:</b>\n"
-    )
-    
-    # Top 5 drivers by confirmed orders
-    top_drivers = sorted(drivers, key=lambda x: x.confirmed_orders, reverse=True)[:5]
-    for idx, driver in enumerate(top_drivers, 1):
-        users_text += f"\n{idx}. {driver.first_name} - {driver.confirmed_orders} tasdiqlangan"
-    
-    await callback.message.edit_text(
-        users_text,
-        reply_markup=get_back_button()
-    )
-    
-    log_admin_action(db, callback.from_user.id, "VIEWED_USERS_INFO")
+    except Exception as e:
+        logger.error(f"Error in today_stats_handler: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 
-@router.callback_query(F.data == "admin_active_orders")
-async def active_orders(callback: CallbackQuery, db: Session):
-    """Aktiv buyurtmalar"""
-    await callback.answer()
-    
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Siz admin emassiz", show_alert=True)
-        return
-    
-    # Aktiv buyurtmalarni olish
-    from sqlalchemy import select
-    active_orders = db.query(Order).filter(
-        Order.status.in_([OrderStatus.WAITING, OrderStatus.ACCEPTED])
-    ).all()
-    
-    if not active_orders:
-        await callback.message.edit_text(
-            "✅ Hech qanday aktiv buyurtma yo'q",
-            reply_markup=get_back_button()
+@router.message(F.text == "📅 Boshqa kun statistikasi")
+async def other_date_stats_handler(message: Message, state: FSMContext):
+    """Boshqa kun statistikasi"""
+    try:
+        if not is_admin(message.from_user.id):
+            await message.answer("❌ Sizda admin huquqlari yo'q!")
+            return
+        
+        text = (
+            "📅 <b>Boshqa kun statistikasi</b>\n\n"
+            "Sanani DD.MM.YYYY formatida yuboring:\n"
+            "(Masalan: 20.01.2026)"
         )
-        return
+        await message.answer(text)
+        await state.set_state(AdminStates.waiting_for_date)
     
-    orders_text = (
-        f"📋 <b>Aktiv Buyurtmalar ({len(active_orders)})</b>\n\n"
-    )
-    
-    for order in active_orders[:10]:  # Birinchi 10 ta
-        status_emoji = "⏳" if order.status == OrderStatus.WAITING else "👤"
-        orders_text += (
-            f"{status_emoji} ID: {order.order_id} | "
-            f"Turi: {order.service_type} | "
-            f"Vaqti: {order.created_at.strftime('%H:%M')}\n"
-        )
-    
-    if len(active_orders) > 10:
-        orders_text += f"\n... va {len(active_orders) - 10} ta ko'p"
-    
-    await callback.message.edit_text(
-        orders_text,
-        reply_markup=get_back_button()
-    )
-    
-    log_admin_action(
-        db,
-        callback.from_user.id,
-        "VIEWED_ACTIVE_ORDERS",
-        f"Total: {len(active_orders)}"
-    )
+    except Exception as e:
+        logger.error(f"Error in other_date_stats_handler: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 
-@router.callback_query(F.data == "admin_send_broadcast")
-async def send_broadcast_prompt(callback: CallbackQuery, state: FSMContext):
-    """Xabar yuborish uchun admin amaliyoti"""
-    await callback.answer()
+@router.message(AdminStates.waiting_for_date)
+async def date_stats_handler(message: Message, state: FSMContext):
+    """Sana bo'yicha statistika"""
+    try:
+        if not is_admin(message.from_user.id):
+            await message.answer("❌ Sizda admin huquqlari yo'q!")
+            await state.clear()
+            return
+        
+        # Sanani parse qilish
+        target_date = format_date(message.text.strip())
+        
+        if not target_date:
+            await message.answer(
+                "❌ Sana noto'g'ri!\n"
+                "DD.MM.YYYY formatida yuboring (masalan: 20.01.2026)"
+            )
+            return
+        
+        await state.clear()
+        
+        db = get_db()
+        try:
+            # Sana bo'yicha statistikani olish
+            stats_list = db_manager.get_daily_stats(db, target_date.date())
+            
+            if not stats_list:
+                await message.answer(f"📊 {target_date.strftime('%d.%m.%Y')} kuni statistika yo'q.")
+                return
+            
+            # Umumiy hisoblar
+            total_orders = sum(s.orders_count for s in stats_list)
+            total_confirmed = sum(s.confirmed_count for s in stats_list)
+            total_rejected = sum(s.rejected_count for s in stats_list)
+            
+            # Yo'lovchilar statistikasi
+            passengers = [s for s in stats_list if s.user_type == "passenger"]
+            passengers.sort(key=lambda x: x.orders_count, reverse=True)
+            
+            # Haydovchilar statistikasi (tasdiqlangan)
+            drivers_confirmed = [s for s in stats_list if s.user_type == "driver"]
+            drivers_confirmed.sort(key=lambda x: x.confirmed_count, reverse=True)
+            
+            # Haydovchilar statistikasi (rad etilgan)
+            drivers_rejected = [s for s in stats_list if s.user_type == "driver"]
+            drivers_rejected.sort(key=lambda x: x.rejected_count, reverse=True)
+            
+            # Xabar yaratish
+            text = (
+                f"📊 <b>STATISTIKA</b>\n"
+                f"📅 Sana: {target_date.strftime('%d.%m.%Y')}\n\n"
+                f"📈 <b>Umumiy:</b>\n"
+                f"• Buyurtmalar: {total_orders}\n"
+                f"• Tasdiqlangan: {total_confirmed}\n"
+                f"• Rad etilgan: {total_rejected}\n\n"
+            )
+            
+            # Yo'lovchilar
+            if passengers:
+                text += "🧍‍♂️ <b>Yo'lovchilar (buyurtmalar):</b>\n"
+                for s in passengers[:10]:  # Top 10
+                    text += f"• {s.user_name}: {s.orders_count} ta\n"
+                text += "\n"
+            
+            # Haydovchilar (tasdiqlangan)
+            if drivers_confirmed:
+                text += "🚖 <b>Haydovchilar (tasdiqlangan):</b>\n"
+                for s in drivers_confirmed[:10]:  # Top 10
+                    if s.confirmed_count > 0:
+                        text += f"• {s.user_name}: {s.confirmed_count} ta\n"
+                text += "\n"
+            
+            # Haydovchilar (rad etilgan)
+            if drivers_rejected:
+                rejected_list = [s for s in drivers_rejected if s.rejected_count > 0]
+                if rejected_list:
+                    text += "❌ <b>Haydovchilar (rad etilgan):</b>\n"
+                    for s in rejected_list[:10]:  # Top 10
+                        text += f"• {s.user_name}: {s.rejected_count} ta\n"
+            
+            await message.answer(text, reply_markup=admin_keyboard())
+        
+        finally:
+            db.close()
     
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Siz admin emassiz", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "📢 <b>Xabar Yuborish</b>\n\n"
-        "Barcha foydalanuvchilarga yuborish uchun xabar kiriting:",
-        reply_markup=None
-    )
-    
-    await state.set_state(AdminState.waiting_for_action)
+    except Exception as e:
+        logger.error(f"Error in date_stats_handler: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")
+        await state.clear()
 
 
-@router.callback_query(F.data == "back_to_menu")
-async def back_to_admin_menu(callback: CallbackQuery, state: FSMContext):
-    """Admin menyusiga qaytish"""
-    await callback.answer()
+@router.message(F.text == "🔙 Asosiy menyu")
+async def back_to_main_menu_handler(message: Message, state: FSMContext):
+    """Asosiy menyuga qaytish"""
+    try:
+        await state.clear()
+        
+        user_id = message.from_user.id
+        
+        # Admin uchun
+        if is_admin(user_id):
+            text = "👨‍💼 Admin rejimi o'chirildi.\n\n/admin - Admin panelga qaytish"
+            await message.answer(text)
+            return
+        
+        # Oddiy foydalanuvchi uchun
+        db = get_db()
+        try:
+            user = db_manager.get_user(db, user_id)
+            
+            if user and user.user_type == "passenger":
+                text = "🔙 Asosiy menyuga qaytdingiz.\n\nKerakli xizmatni tanlang:"
+                await message.answer(text, reply_markup=services_keyboard())
+            else:
+                text = "🔙 Asosiy menyuga qaytdingiz."
+                await message.answer(text)
+        
+        finally:
+            db.close()
     
-    await callback.message.edit_text(
-        "👨‍💼 <b>Admin Paneli</b>\n\nQuyidagi amallarni tanlang:",
-        reply_markup=get_admin_menu_keyboard()
-    )
-    
-    await state.clear()
+    except Exception as e:
+        logger.error(f"Error in back_to_main_menu_handler: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")

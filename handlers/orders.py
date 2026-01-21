@@ -1,427 +1,291 @@
 """
-Order Management Handlers
-Buyurtma yaratish, qabul qilish, tasdiqlash
+Orders handler - Accept, Confirm, Reject callbacks
 """
-
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
-
-from config import config, ServiceType, OrderStatus, UserRole
-from states import OrderState
-from keyboards import (
-    get_taxi_order_confirmation_keyboard,
-    get_driver_confirm_keyboard,
-    get_service_keyboard,
-    get_back_button,
-    format_order_message
-)
-from crud import (
-    get_user_by_telegram_id,
-    create_order,
-    get_order_by_id,
-    accept_order,
-    decline_order,
-    confirm_order,
-    cancel_order,
-    can_place_order,
-    set_cooldown,
-    get_active_taxi_order_for_user,
-    get_waiting_orders_by_service,
-    get_all_drivers
-)
+from aiogram import Router, F
+from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from database import get_db, db_manager
+from keyboards import driver_action_keyboard, accept_order_keyboard
+from config import config
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
 
-@router.callback_query(F.data == "select_service")
-async def select_service(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Xizmat tanlash"""
-    await callback.answer()
-    
-    user_id = callback.from_user.id
-    user = get_user_by_telegram_id(db, user_id)
-    
-    if not user or user.role != UserRole.PASSENGER:
-        await callback.answer("❌ Siz yo'lovchi hisobiga kira olmadingiz", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "🎯 Quyidagi xizmatlardan birini tanlang:",
-        reply_markup=get_service_keyboard()
-    )
-
-
-@router.callback_query(F.data == "service_taxi")
-async def order_taxi(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Taxi buyurtma berish"""
-    await callback.answer()
-    
-    user_id = callback.from_user.id
-    user = get_user_by_telegram_id(db, user_id)
-    
-    if not user:
-        await callback.answer("❌ Avval ro'yxatdan o'ting", show_alert=True)
-        return
-    
-    # Taxi uchun shartlarni tekshirish
-    can_order, reason = can_place_order(db, user.user_id, ServiceType.TAXI)
-    
-    if not can_order:
-        await callback.answer(reason, show_alert=True)
-        return
-    
-    # Buyurtma yaratish
-    order = create_order(
-        db=db,
-        user_id=user.user_id,
-        service_type=ServiceType.TAXI,
-        phone_number=user.phone_number,
-        description="Taxi buyurtmasi"
-    )
-    
-    # Xabarni haydovchilar guruhiga yuborish
-    order_text = (
-        f"🚕 <b>YANGI TAXI BUYURTMASI!</b>\n\n"
-        f"📋 Buyurtma ID: <code>{order.order_id}</code>\n"
-        f"⏰ Vaqti: {order.created_at.strftime('%H:%M:%S')}\n"
-        f"📞 Telefon: <code>{user.phone_number}</code>\n"
-        f"👤 Yo'lovchi: {user.first_name} {user.last_name or ''}\n\n"
-        f"⏳ <b>7 daqiqada javob yoki bekor qilinadi</b>"
-    )
-    
-    sent_message = await callback.bot.send_message(
-        chat_id=config.DRIVERS_ORDERS_GROUP_ID,
-        text=order_text,
-        reply_markup=get_taxi_order_confirmation_keyboard(order.order_id),
-        parse_mode="HTML"
-    )
-    
-    # Order ma'lumotlarini yangilash
-    from crud import update_order_group_info
-    # Order message ID ni yangilash
-    from crud import update_order_message_id
-    # Alternative: directly update
-    order.message_id = sent_message.message_id
-    order.group_id = config.DRIVERS_ORDERS_GROUP_ID
-    db.commit()
-    
-    # Yo'lovchiga xabar
-    await callback.message.edit_text(
-        f"✅ <b>Taxi Buyurtmasi Berildi!</b>\n\n"
-        f"📋 Buyurtma ID: {order.order_id}\n"
-        f"⏳ Haydovchi aniqlashi uchun 7 daqiqa kutilmoqda...\n\n"
-        f"Yo'lovchiga ko'rsatadigan telefon: <code>{user.phone_number}</code>",
-        reply_markup=get_back_button()
-    )
-    
-    # Cooldown o'rnatish
-    set_cooldown(db, user.user_id, ServiceType.TAXI)
-    
-    logger.info(f"Taxi order created: {order.order_id} by user {user_id}")
-
-
-@router.callback_query(F.data.startswith("service_bread"))
-async def order_bread(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Non buyurtma berish"""
-    await callback.answer()
-    
-    user_id = callback.from_user.id
-    user = get_user_by_telegram_id(db, user_id)
-    
-    if not user:
-        await callback.answer("❌ Avval ro'yxatdan o'ting", show_alert=True)
-        return
-    
-    # Cooldown tekshirish
-    can_order, reason = can_place_order(db, user.user_id, ServiceType.BREAD)
-    
-    if not can_order:
-        await callback.answer(reason, show_alert=True)
-        return
-    
-    # Buyurtma yaratish
-    order = create_order(
-        db=db,
-        user_id=user.user_id,
-        service_type=ServiceType.BREAD,
-        phone_number=user.phone_number,
-        description="Non buyurtmasi"
-    )
-    
-    # Xabarni non guruhiga yuborish
-    order_text = (
-        f"🥖 <b>YANGI NON BUYURTMASI!</b>\n\n"
-        f"📋 Buyurtma ID: <code>{order.order_id}</code>\n"
-        f"⏰ Vaqti: {order.created_at.strftime('%H:%M:%S')}\n"
-        f"📞 Telefon: <code>{user.phone_number}</code>\n"
-        f"👤 Buyurtmachi: {user.first_name} {user.last_name or ''}\n"
-        f"🏘️ Hudud: {user.residence_area}"
-    )
-    
-    await callback.bot.send_message(
-        chat_id=config.DRIVERS_ORDERS_GROUP_ID,
-        text=order_text,
-        parse_mode="HTML"
-    )
-    
-    # Yo'lovchiga xabar
-    await callback.message.edit_text(
-        f"✅ <b>Non Buyurtmasi Berildi!</b>\n\n"
-        f"📋 Buyurtma ID: {order.order_id}\n"
-        f"📞 Telefon: <code>{user.phone_number}</code>\n\n"
-        f"Tez orada sizga bog'lanishadi.",
-        reply_markup=get_back_button()
-    )
-    
-    # Cooldown o'rnatish
-    set_cooldown(db, user.user_id, ServiceType.BREAD)
-    
-    logger.info(f"Bread order created: {order.order_id} by user {user_id}")
-
-
-@router.callback_query(F.data.startswith("service_feed"))
-async def order_feed(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Yem buyurtma berish"""
-    await callback.answer()
-    
-    user_id = callback.from_user.id
-    user = get_user_by_telegram_id(db, user_id)
-    
-    if not user:
-        await callback.answer("❌ Avval ro'yxatdan o'ting", show_alert=True)
-        return
-    
-    # Cooldown tekshirish
-    can_order, reason = can_place_order(db, user.user_id, ServiceType.FEED)
-    
-    if not can_order:
-        await callback.answer(reason, show_alert=True)
-        return
-    
-    # Buyurtma yaratish
-    order = create_order(
-        db=db,
-        user_id=user.user_id,
-        service_type=ServiceType.FEED,
-        phone_number=user.phone_number,
-        description="Yem buyurtmasi"
-    )
-    
-    # Xabarni yem guruhiga yuborish
-    order_text = (
-        f"🌾 <b>YANGI YEM BUYURTMASI!</b>\n\n"
-        f"📋 Buyurtma ID: <code>{order.order_id}</code>\n"
-        f"⏰ Vaqti: {order.created_at.strftime('%H:%M:%S')}\n"
-        f"📞 Telefon: <code>{user.phone_number}</code>\n"
-        f"👤 Buyurtmachi: {user.first_name} {user.last_name or ''}\n"
-        f"🏘️ Hudud: {user.residence_area}"
-    )
-    
-    await callback.bot.send_message(
-        chat_id=config.DRIVERS_ORDERS_GROUP_ID,
-        text=order_text,
-        parse_mode="HTML"
-    )
-    
-    # Yo'lovchiga xabar
-    await callback.message.edit_text(
-        f"✅ <b>Yem Buyurtmasi Berildi!</b>\n\n"
-        f"📋 Buyurtma ID: {order.order_id}\n"
-        f"📞 Telefon: <code>{user.phone_number}</code>\n\n"
-        f"Tez orada sizga bog'lanishadi.",
-        reply_markup=get_back_button()
-    )
-    
-    # Cooldown o'rnatish
-    set_cooldown(db, user.user_id, ServiceType.FEED)
-    
-    logger.info(f"Feed order created: {order.order_id} by user {user_id}")
-
-
-# ==================== DRIVER HANDLERS ====================
-
-@router.callback_query(F.data.startswith("accept_taxi_"))
-async def accept_taxi_order(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Haydovchi taxi buyurtmasini qabul qilish"""
-    await callback.answer()
-    
-    order_id = int(callback.data.replace("accept_taxi_", ""))
-    driver_id = callback.from_user.id
-    
-    # Haydovchini tekshirish
-    driver = get_user_by_telegram_id(db, driver_id)
-    
-    if not driver or driver.role != UserRole.DRIVER:
-        await callback.answer("❌ Siz haydovchi hisobiga kira olmadingiz", show_alert=True)
-        return
-    
-    # Buyurtmani tekshirish
-    order = get_order_by_id(db, order_id)
-    
-    if not order or order.status != OrderStatus.WAITING:
-        await callback.answer("❌ Bu buyurtma allaqachon qabul qilingan", show_alert=True)
-        return
-    
-    # Buyurtmani qabul qilish
-    accept_order(
-        db=db,
-        order_id=order_id,
-        driver_id=driver.user_id,
-        message_id=callback.message.message_id,
-        group_id=callback.message.chat.id
-    )
-    
-    # Guruhdagi xabarni o'chirish
+@router.callback_query(F.data.startswith("accept_"))
+async def accept_order_callback(callback: CallbackQuery, state: FSMContext):
+    """Buyurtmani qabul qilish (haydovchi)"""
     try:
-        await callback.message.delete()
-    except:
-        pass
-    
-    # Haydovchiga yo'lovchi ma'lumotlarini yuborish
-    from database import User as UserModel
-    
-    passenger = order.user
-    
-    passenger_info_text = (
-        f"✅ <b>Buyurtma Qabul Qilindi!</b>\n\n"
-        f"📋 Buyurtma ID: {order_id}\n"
-        f"👤 Yo'lovchi: {order.user.first_name} {order.user.last_name or ''}\n"
-        f"📞 Telefon: <code>{order.phone_number}</code>\n\n"
-        f"⏰ <b>6 daqiqa vaqt berildi</b>\n"
-        f"Haydovchi bilan bog'lanib, tasdiqlang yoki rad eting"
-    )
-    
-    await callback.bot.send_message(
-        chat_id=driver_id,
-        text=passenger_info_text,
-        reply_markup=get_driver_confirm_keyboard(order_id),
-        parse_mode="HTML"
-    )
-    
-    logger.info(f"Order {order_id} accepted by driver {driver_id}")
-
-
-@router.callback_query(F.data.startswith("decline_taxi_"))
-async def decline_taxi_order(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Haydovchi taxi buyurtmasini rad etish"""
-    await callback.answer()
-    
-    order_id = int(callback.data.replace("decline_taxi_", ""))
-    driver_id = callback.from_user.id
-    
-    # Buyurtmani tekshirish
-    order = get_order_by_id(db, order_id)
-    
-    if not order or order.status != OrderStatus.WAITING:
-        await callback.answer("❌ Bu buyurtma allaqachon qabul qilingan", show_alert=True)
-        return
-    
-    # Rad etish sonini oshirish
-    decline_order(db, order_id)
-    order = get_order_by_id(db, order_id)
-    
-    # Agar 3 marta rad etilgan bo'lsa, buyurtmani bekor qilish
-    if order.declined_count >= config.MAX_DECLINE_BEFORE_CANCEL:
-        cancel_order(db, order_id, "Haydovchilar rad etdi")
+        order_id = int(callback.data.split("_")[1])
+        driver_id = callback.from_user.id
         
-        await callback.bot.send_message(
-            chat_id=driver_id,
-            text="❌ Bu buyurtma juda ko'p rad etilgani uchun bekor qilingan"
-        )
-        
-        # Yo'lovchiga xabar
-        await callback.bot.send_message(
-            chat_id=order.user_id,
-            text=f"❌ Sizning buyurtma #{order_id} bekor qilindi. Iltimos, qayta urinib ko'ring"
-        )
-        
-        # Guruhdagi xabarni o'chirish
+        db = get_db()
         try:
-            await callback.message.delete()
-        except:
-            pass
-    else:
-        # Qayta guruhga yuborish
-        remaining = config.MAX_DECLINE_BEFORE_CANCEL - order.declined_count
+            # Haydovchini tekshirish
+            driver = db_manager.get_user(db, driver_id)
+            
+            if not driver or driver.user_type != "driver":
+                await callback.answer("❌ Faqat haydovchilar buyurtma qabul qilishi mumkin!", show_alert=True)
+                return
+            
+            # Buyurtmani olish
+            order = db_manager.get_order(db, order_id)
+            
+            if not order:
+                await callback.answer("❌ Buyurtma topilmadi!", show_alert=True)
+                return
+            
+            if order.status != "waiting":
+                await callback.answer("❌ Bu buyurtma allaqachon qabul qilingan!", show_alert=True)
+                return
+            
+            # Haydovchida boshqa aktiv buyurtma bormi
+            driver_active_order = db_manager.get_driver_active_order(db, driver_id)
+            
+            if driver_active_order:
+                await callback.answer(
+                    f"❌ Sizda allaqachon aktiv buyurtma bor (ID: {driver_active_order.order_id})!",
+                    show_alert=True
+                )
+                return
+            
+            # Guruh xabarini o'chirish
+            try:
+                if order.group_message_id:
+                    await callback.bot.delete_message(order.group_chat, order.group_message_id)
+            except Exception as e:
+                logger.error(f"Error deleting group message: {e}")
+            
+            # Buyurtmani update qilish
+            db_manager.update_order_status(
+                db=db,
+                order_id=order_id,
+                status="accepted",
+                driver_id=driver_id,
+                driver_name=driver.fullname
+            )
+            
+            # GROUP3 ga info yuborish
+            if config.GROUP3:
+                info_text = f"✅ Buyurtma #{order_id} {driver.fullname} ga yuborildi."
+                try:
+                    await callback.bot.send_message(config.GROUP3, info_text)
+                except Exception as e:
+                    logger.error(f"Error sending info to GROUP3: {e}")
+            
+            # Haydovchiga PRIVATE ga yo'lovchi ma'lumotini TELEFON bilan yuborish
+            private_text = (
+                "✅ <b>SIZ BUYURTMANI QABUL QILDINGIZ</b>\n\n"
+                f"📋 Buyurtma ID: {order_id}\n"
+                f"👤 Yo'lovchi: {order.passenger_name}\n"
+                f"📞 Telefon: {order.passenger_phone}\n"
+                f"📍 Hudud: {order.passenger_area}\n\n"
+                "Iltimos, yo'lovchi bilan bog'lanib, buyurtmani tasdiqlang yoki rad eting."
+            )
+            
+            await callback.bot.send_message(
+                driver_id,
+                private_text,
+                reply_markup=driver_action_keyboard(order_id)
+            )
+            
+            await callback.answer("✅ Buyurtma qabul qilindi! Telefon raqami sizga yuborildi.")
+            logger.info(f"Order {order_id} accepted by driver {driver_id}")
         
-        order_text = (
-            f"🚕 <b>TAXI BUYURTMASI (Rad {order.declined_count}/{config.MAX_DECLINE_BEFORE_CANCEL})</b>\n\n"
-            f"📋 Buyurtma ID: <code>{order.order_id}</code>\n"
-            f"📞 Telefon: <code>{order.phone_number}</code>\n"
-            f"👤 Yo'lovchi: {order.user.first_name} {order.user.last_name or ''}\n\n"
-            f"⏳ <b>7 daqiqada javob yoki bekor qilinadi</b>"
-        )
+        finally:
+            db.close()
+    
+    except Exception as e:
+        logger.error(f"Error in accept_order_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("confirm_"))
+async def confirm_order_callback(callback: CallbackQuery, state: FSMContext):
+    """Buyurtmani tasdiqlash (haydovchi)"""
+    try:
+        order_id = int(callback.data.split("_")[1])
+        driver_id = callback.from_user.id
         
-        new_message = await callback.bot.send_message(
-            chat_id=config.DRIVERS_ORDERS_GROUP_ID,
-            text=order_text,
-            reply_markup=get_taxi_order_confirmation_keyboard(order_id),
-            parse_mode="HTML"
-        )
-        
-        # Order message ID ni yangilash
-        order.message_id = new_message.message_id
-        db.commit()
-        
-        # Eski xabarni o'chirish
+        db = get_db()
         try:
-            await callback.message.delete()
-        except:
-            pass
+            # Buyurtmani olish
+            order = db_manager.get_order(db, order_id)
+            
+            if not order:
+                await callback.answer("❌ Buyurtma topilmadi!", show_alert=True)
+                return
+            
+            if order.status != "accepted":
+                await callback.answer("❌ Bu buyurtma accepted statusida emas!", show_alert=True)
+                return
+            
+            if order.driver_id != driver_id:
+                await callback.answer("❌ Faqat o'zingiz qabul qilgan buyurtmani tasdiqlashingiz mumkin!", show_alert=True)
+                return
+            
+            # Buyurtmani tasdiqlash
+            db_manager.update_order_status(db, order_id, "confirmed")
+            
+            # Driver statsga qo'shish
+            driver = db_manager.get_user(db, driver_id)
+            if driver:
+                db_manager.increment_confirmed_count(db, driver_id, driver.fullname, "driver")
+            
+            # Haydovchi xabarini edit qilish
+            try:
+                await callback.message.edit_text(
+                    f"✅ <b>BUYURTMA TASDIQLANDI</b>\n\n"
+                    f"📋 Buyurtma ID: {order_id}\n"
+                    f"👤 Yo'lovchi: {order.passenger_name}\n"
+                    f"📞 Telefon: {order.passenger_phone}\n"
+                    f"📍 Hudud: {order.passenger_area}\n\n"
+                    f"⏰ Tasdiqlangan vaqt: {datetime.utcnow().strftime('%H:%M')}"
+                )
+            except Exception as e:
+                logger.error(f"Error editing message: {e}")
+            
+            # Yo'lovchiga haydovchi ma'lumotini yuborish
+            passenger_text = (
+                "✅ <b>BUYURTMA TASDIQLANDI!</b>\n\n"
+                f"📋 Buyurtma ID: {order_id}\n"
+            )
+            
+            # Haydovchi ma'lumotlari
+            if driver:
+                passenger_text += (
+                    f"🚖 Haydovchi: {driver.fullname}\n"
+                    f"📞 Telefon: {driver.phone}\n"
+                    f"🚗 Mashina: {driver.car_model}\n"
+                )
+            else:
+                passenger_text += f"🚖 Haydovchi: {order.driver_name}\n"
+            
+            passenger_text += f"\n⏰ Vaqt: {datetime.utcnow().strftime('%H:%M')}"
+            
+            try:
+                await callback.bot.send_message(order.passenger_id, passenger_text)
+            except Exception as e:
+                logger.error(f"Error sending to passenger: {e}")
+            
+            await callback.answer("✅ Buyurtma tasdiqlandi!")
+            logger.info(f"Order {order_id} confirmed by driver {driver_id}")
         
-        await callback.answer(f"❌ Rad etildi. Qolgan: {remaining} ta")
+        finally:
+            db.close()
     
-    logger.info(f"Order {order_id} declined by driver {driver_id}")
+    except Exception as e:
+        logger.error(f"Error in confirm_order_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("driver_confirm_"))
-async def driver_confirm_order(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Haydovchi buyurtmani tasdiqlash"""
-    await callback.answer()
+@router.callback_query(F.data.startswith("reject_"))
+async def reject_order_callback(callback: CallbackQuery, state: FSMContext):
+    """Buyurtmani rad etish (haydovchi)"""
+    try:
+        order_id = int(callback.data.split("_")[1])
+        driver_id = callback.from_user.id
+        
+        db = get_db()
+        try:
+            # Buyurtmani olish
+            order = db_manager.get_order(db, order_id)
+            
+            if not order:
+                await callback.answer("❌ Buyurtma topilmadi!", show_alert=True)
+                return
+            
+            if order.status != "accepted":
+                await callback.answer("❌ Bu buyurtma accepted statusida emas!", show_alert=True)
+                return
+            
+            if order.driver_id != driver_id:
+                await callback.answer("❌ Faqat o'zingiz qabul qilgan buyurtmani rad etishingiz mumkin!", show_alert=True)
+                return
+            
+            # Reject count'ni oshirish
+            order = db_manager.increment_reject_count(db, order_id)
+            
+            # Driver statsga qo'shish
+            driver = db_manager.get_user(db, driver_id)
+            if driver:
+                db_manager.increment_rejected_count(db, driver_id, driver.fullname, "driver")
+            
+            # Haydovchi xabarini edit qilish
+            try:
+                await callback.message.edit_text(
+                    f"❌ <b>BUYURTMA RAD ETILDI</b>\n\n"
+                    f"📋 Buyurtma ID: {order_id}\n"
+                    f"👤 Yo'lovchi: {order.passenger_name}\n\n"
+                    f"⏰ Rad etilgan vaqt: {datetime.utcnow().strftime('%H:%M')}"
+                )
+            except Exception as e:
+                logger.error(f"Error editing message: {e}")
+            
+            # 3 martadan kam rad etilgan bo'lsa - qayta yuborish
+            if order.reject_count < config.MAX_REJECT_COUNT:
+                # Buyurtmani reset qilish
+                order = db_manager.reset_order_for_repost(db, order_id)
+                
+                # GROUP3 ga QAYTA yuborish (TELEFONSIZ)
+                if config.GROUP3:
+                    group_text = (
+                        f"🔄 <b>QAYTA YUBORILDI ({order.reject_count}/{config.MAX_REJECT_COUNT})</b>\n\n"
+                        "🧍‍♂️ <b>YO'LOVCHI XIZMATI</b>\n\n"
+                        f"📍 Hudud: {order.passenger_area}\n"
+                        f"👤 Ism: {order.passenger_name}\n"
+                        f"🚕 Xizmat: Taxi\n\n"
+                        f"⏰ Vaqt: {datetime.utcnow().strftime('%H:%M')}\n"
+                        f"🆔 Buyurtma ID: {order_id}"
+                    )
+                    
+                    try:
+                        group_message = await callback.bot.send_message(
+                            config.GROUP3,
+                            group_text,
+                            reply_markup=accept_order_keyboard(order_id)
+                        )
+                        
+                        # Group message ID'sini saqlash
+                        db_manager.set_group_message_id(db, order_id, group_message.message_id)
+                    
+                    except Exception as e:
+                        logger.error(f"Error sending to GROUP3: {e}")
+                
+                await callback.answer(f"❌ Buyurtma rad etildi va qayta yuborildi ({order.reject_count}/{config.MAX_REJECT_COUNT})")
+            
+            else:
+                # 3 marta rad etilgan - buyurtmani yopish
+                db_manager.update_order_status(db, order_id, "cancelled")
+                
+                # GROUP3 ga xabar
+                if config.GROUP3:
+                    cancel_text = f"❌ Buyurtma #{order_id} 3 marta rad etildi va yopildi."
+                    try:
+                        await callback.bot.send_message(config.GROUP3, cancel_text)
+                    except Exception as e:
+                        logger.error(f"Error sending to GROUP3: {e}")
+                
+                # Yo'lovchiga xabar
+                passenger_text = (
+                    f"❌ Buyurtma #{order_id} 3 marta rad etildi va yopildi.\n\n"
+                    "Iltimos, keyinroq qaytadan urinib ko'ring."
+                )
+                try:
+                    await callback.bot.send_message(order.passenger_id, passenger_text)
+                except Exception as e:
+                    logger.error(f"Error sending to passenger: {e}")
+                
+                await callback.answer("❌ Buyurtma 3 marta rad etildi va yopildi!", show_alert=True)
+            
+            logger.info(f"Order {order_id} rejected by driver {driver_id} (count: {order.reject_count})")
+        
+        finally:
+            db.close()
     
-    order_id = int(callback.data.replace("driver_confirm_", ""))
-    
-    order = get_order_by_id(db, order_id)
-    
-    if not order or order.status != OrderStatus.ACCEPTED:
-        await callback.answer("❌ Bu buyurtma bekor qilingan", show_alert=True)
-        return
-    
-    # Buyurtmani tasdiqlash
-    confirm_order(db, order_id)
-    
-    await callback.answer("✅ Buyurtma tasdiqlandi!")
-    
-    # Yo'lovchiga xabar
-    await callback.bot.send_message(
-        chat_id=order.user_id,
-        text=f"✅ Haydovchi sizning taxi buyurtmasini #{order_id} tasdiqladi!"
-    )
-    
-    logger.info(f"Order {order_id} confirmed by driver")
-
-
-@router.callback_query(F.data.startswith("driver_decline_"))
-async def driver_decline_order(callback: CallbackQuery, state: FSMContext, db: Session):
-    """Haydovchi buyurtmani rad etish"""
-    await callback.answer("❌ Buyurtma rad etildi")
-    
-    order_id = int(callback.data.replace("driver_decline_", ""))
-    
-    # Buyurtmani bekor qilish
-    cancel_order(db, order_id, "Haydovchi rad etdi")
-    
-    # Yo'lovchiga xabar
-    order = get_order_by_id(db, order_id)
-    await callback.bot.send_message(
-        chat_id=order.user_id,
-        text=f"❌ Haydovchi #buyurtma {order_id} ni rad etdi. Iltimos, qayta urinib ko'ring"
-    )
-    
-    logger.info(f"Order {order_id} declined by driver")
+    except Exception as e:
+        logger.error(f"Error in reject_order_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)

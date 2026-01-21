@@ -1,120 +1,128 @@
 """
-Main Bot File
-Bot initialization va run
+Main entry point - Bot ishga tushirish
 """
-
 import asyncio
 import logging
-import sys
-from pathlib import Path
-
-from aiogram import Bot, Dispatcher, Router
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, BotCommandScopeDefault
-
+from logging.handlers import RotatingFileHandler
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from config import config
 from database import init_db
-from states import DatabaseMiddleware, UserCheckMiddleware, AdminCheckMiddleware
-from scheduler import init_scheduler, stop_scheduler
-from utils import LogHelper
+from middlewares import SubscriptionMiddleware
 
-# Logging o'rnatish
-logger = LogHelper.setup_logging()
+# Handlers
+from handlers import start, registration, services, orders, admin, commands
 
-# Handlers import
-from handlers import start, driver_registration, passenger_registration, orders, admin
-
-
-async def setup_commands(bot: Bot):
-    """Bot komandalarini o'rnatish"""
-    commands = [
-        BotCommand(command="start", description="Botni boshlash"),
-        BotCommand(command="menu", description="Menyu"),
-        BotCommand(command="admin", description="Admin paneli"),
-        BotCommand(command="help", description="Yordam"),
+# Logging sozlash
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(
+            config.LOG_FILE,
+            maxBytes=config.LOG_MAX_BYTES,
+            backupCount=config.LOG_BACKUP_COUNT,
+            encoding='utf-8'
+        )
     ]
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def on_startup(bot: Bot):
+    """Bot ishga tushganda"""
+    try:
+        # Database'ni initsializatsiya qilish
+        logger.info("Initializing database...")
+        init_db()
+        logger.info("Database initialized successfully")
+        
+        # Bot ma'lumotlarini olish
+        bot_info = await bot.me()
+        logger.info(f"Bot started: @{bot_info.username} (ID: {bot_info.id})")
+        
+        # Adminlarga xabar yuborish
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    f"✅ Bot ishga tushdi!\n\n"
+                    f"🤖 Bot: @{bot_info.username}\n"
+                    f"🆔 ID: {bot_info.id}"
+                )
+            except Exception as e:
+                logger.error(f"Error sending startup message to admin {admin_id}: {e}")
     
-    await bot.set_my_commands(commands, BotCommandScopeDefault())
-    logger.info("Bot commands set successfully")
+    except Exception as e:
+        logger.error(f"Error in on_startup: {e}")
+        raise
+
+
+async def on_shutdown(bot: Bot):
+    """Bot to'xtaganda"""
+    try:
+        logger.info("Shutting down bot...")
+        
+        # Adminlarga xabar yuborish
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    admin_id,
+                    "⚠️ Bot to'xtatildi!"
+                )
+            except Exception as e:
+                logger.error(f"Error sending shutdown message to admin {admin_id}: {e}")
+        
+        logger.info("Bot stopped successfully")
+    
+    except Exception as e:
+        logger.error(f"Error in on_shutdown: {e}")
 
 
 async def main():
-    """Main funksiya"""
-    
-    # Database bilan bog'lanish
-    logger.info("Initializing database...")
-    init_db()
-    logger.info("Database initialized")
-    
-    # Bot va Dispatcher yaratish
-    bot = Bot(token=config.BOT_TOKEN, parse_mode="HTML")
-    storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
-    
-    # Middlewares qo'shish
-    dp.message.middleware(DatabaseMiddleware())
-    dp.message.middleware(UserCheckMiddleware())
-    dp.message.middleware(AdminCheckMiddleware())
-    
-    dp.callback_query.middleware(DatabaseMiddleware())
-    dp.callback_query.middleware(UserCheckMiddleware())
-    dp.callback_query.middleware(AdminCheckMiddleware())
-    
-    # Handlers ro'yxatlarini qo'shish
-    main_router = Router()
-    
-    main_router.include_router(start.router)
-    main_router.include_router(driver_registration.router)
-    main_router.include_router(passenger_registration.router)
-    main_router.include_router(orders.router)
-    main_router.include_router(admin.router)
-    
-    dp.include_router(main_router)
-    
-    # Bot komandalarini o'rnatish
-    await setup_commands(bot)
-    
-    # Schedulerni ishga tushirish
-    logger.info("Starting scheduler...")
-    await init_scheduler(bot)
-    logger.info("Scheduler started")
-    
-    # Bot-ni long polling-da boshlash
+    """Asosiy funksiya"""
     try:
-        logger.info("Bot starting with long polling...")
-        await dp.start_polling(
-            bot,
-            allowed_updates=dp.resolve_used_update_types(),
-            skip_updates=True
+        # Bot va Dispatcher yaratish
+        bot = Bot(
+            token=config.BOT_TOKEN,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
         )
+        
+        dp = Dispatcher()
+        
+        # Middleware'larni qo'shish
+        # Subscription middleware faqat private chat uchun
+        dp.message.middleware(SubscriptionMiddleware())
+        dp.callback_query.middleware(SubscriptionMiddleware())
+        
+        # Router'larni qo'shish
+        dp.include_router(start.router)
+        dp.include_router(registration.router)
+        dp.include_router(services.router)
+        dp.include_router(orders.router)
+        dp.include_router(admin.router)
+        dp.include_router(commands.router)
+        
+        # Startup va shutdown handlerlar
+        dp.startup.register(on_startup)
+        dp.shutdown.register(on_shutdown)
+        
+        # Polling boshlash
+        logger.info("Starting bot polling...")
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    
     except Exception as e:
-        logger.error(f"Bot error: {e}")
+        logger.error(f"Error in main: {e}")
         raise
-    finally:
-        # Cleanup
-        stop_scheduler()
-        await bot.session.close()
-        logger.info("Bot stopped")
 
 
 if __name__ == "__main__":
-    
-    # .env file ni load qilish (optional)
-    try:
-        from dotenv import load_dotenv
-        env_path = Path(__file__).parent / ".env"
-        if env_path.exists():
-            load_dotenv(env_path)
-            logger.info("Environment variables loaded from .env")
-    except ImportError:
-        logger.warning("python-dotenv not installed, skipping .env loading")
-    
-    # Bot-ni boshlash
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot interrupted by user")
-        sys.exit(0)
+        logger.info("Bot stopped by user")
     except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
-        sys.exit(1)
+        logger.error(f"Fatal error: {e}")

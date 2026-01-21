@@ -1,46 +1,47 @@
 """
-Bot Configuration Module
-Barcha konfiguratsiyalar va o'zgarmalarni shu yerda saqlash
+Bot konfiguratsiyasi
 """
-
 import os
-from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
-@dataclass
 class Config:
-    """Bot va database konfiguratsiyasi"""
+    """Bot konfiguratsiyasi"""
     
-    # Telegram Bot Tokens va ID'lar
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-    ADMIN_IDS: list = [int(x) for x in os.getenv("ADMIN_IDS", "123456789").split(",")]
-    CHANNEL_ID: int = int(os.getenv("CHANNEL_ID", "-1001234567890"))
-    
-    # Guruhlar ID'ari
-    DRIVERS_GROUP_ID: int = int(os.getenv("DRIVERS_GROUP_ID", "-1001234567891"))
-    PASSENGERS_GROUP_ID: int = int(os.getenv("PASSENGERS_GROUP_ID", "-1001234567892"))
-    DRIVERS_ORDERS_GROUP_ID: int = int(os.getenv("DRIVERS_ORDERS_GROUP_ID", "-1001234567893"))
-    
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "sqlite:///./xizmatlar_bot.db"
-    )
-    
-    # Timers (sekundda)
-    TAXI_ORDER_TIMEOUT: int = 7 * 60  # 7 daqiqa
-    DRIVER_RESPONSE_TIMEOUT: int = 6 * 60  # 6 daqiqa
-    BREAD_COOLDOWN: int = 3 * 60 * 60  # 3 soat
-    FEED_COOLDOWN: int = 3 * 60 * 60  # 3 soat
-    
-    # Haydovchi radlarini cheklov
-    MAX_DECLINE_BEFORE_CANCEL: int = 3
-    
-    # Pagination
-    ITEMS_PER_PAGE: int = 10
-    
-    # Redis (opsional, kesh uchun)
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    def __init__(self):
+        # Bot tokeni
+        self.BOT_TOKEN = os.getenv("BOT_TOKEN")
+        
+        # Admin ID'lari (vergul bilan ajratilgan)
+        self.ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+        
+        # Majburiy kanal
+        self.CHANNEL_ID = os.getenv("CHANNEL_ID")  # @channel_username yoki -100123456789
+        
+        # Guruhlar
+        self.GROUP1 = int(os.getenv("GROUP1")) if os.getenv("GROUP1") else None  # Haydovchilar guruhi
+        self.GROUP2 = int(os.getenv("GROUP2")) if os.getenv("GROUP2") else None  # Yo'lovchilar guruhi
+        self.GROUP3 = int(os.getenv("GROUP3")) if os.getenv("GROUP3") else None  # Buyurtmalar guruhi
+        
+        # Database
+        self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///taksi_bot.db")
+        
+        # Timeoutlar (soniyalarda)
+        self.GROUP_TIMEOUT = 7 * 60  # 7 daqiqa
+        self.ACCEPTED_TIMEOUT = 6 * 60  # 6 daqiqa
+        
+        # Cooldown (soniyalarda)
+        self.PRODUCT_COOLDOWN = 3 * 60 * 60  # 3 soat
+        
+        # Maksimal rad etish soni
+        self.MAX_REJECT_COUNT = 3
+        
+        # Logging
+        self.LOG_FILE = "taksi_bot.log"
+        self.LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+        self.LOG_BACKUP_COUNT = 5
 
 
 config = Config()
