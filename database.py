@@ -97,6 +97,17 @@ class DailyStats(Base):
     __table_args__ = (UniqueConstraint('date', 'user_id', name='_date_user_uc'),)
 
 
+class Channel(Base):
+    """Majburiy kanallar jadvali"""
+    __tablename__ = "channels"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(String(100), nullable=False, unique=True, index=True)
+    channel_name = Column(String(200), nullable=True)
+    added_by = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ===== DATABASE INIT =====
 
 def init_db():
@@ -429,6 +440,58 @@ class DatabaseManager:
         except Exception as e:
             db.rollback()
             logger.error(f"Error cleaning up old data: {e}")
+    
+    # ===== CHANNEL CRUD =====
+    
+    @staticmethod
+    def get_all_channels(db: Session):
+        """Barcha majburiy kanallarni olish"""
+        return db.query(Channel).all()
+    
+    @staticmethod
+    def get_channel(db: Session, channel_id: str):
+        """Kanalni olish"""
+        return db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    
+    @staticmethod
+    def add_channel(db: Session, channel_id: str, channel_name: str, added_by: int):
+        """Yangi kanal qo'shish"""
+        try:
+            # Allaqachon borligini tekshirish
+            existing = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+            if existing:
+                return None
+            
+            channel = Channel(
+                channel_id=channel_id,
+                channel_name=channel_name,
+                added_by=added_by
+            )
+            db.add(channel)
+            db.commit()
+            db.refresh(channel)
+            logger.info(f"Channel added: {channel_id} by {added_by}")
+            return channel
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error adding channel: {e}")
+            return None
+    
+    @staticmethod
+    def delete_channel(db: Session, channel_id: str) -> bool:
+        """Kanalni o'chirish"""
+        try:
+            channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+            if channel:
+                db.delete(channel)
+                db.commit()
+                logger.info(f"Channel deleted: {channel_id}")
+                return True
+            return False
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting channel: {e}")
+            return False
 
 
 db_manager = DatabaseManager()

@@ -45,12 +45,12 @@ class SubscriptionMiddleware(BaseMiddleware):
         if not is_subscribed:
             # Obuna bo'lmagan - xabar yuborish
             text = (
-                "❗️ Botdan foydalanish uchun avval kanalimizga obuna bo'lishingiz kerak!\n\n"
-                "Obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
+                "❗️ Botdan foydalanish uchun avval barcha kanallarga obuna bo'lishingiz kerak!\n\n"
+                "Barcha kanallarga obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
             )
             
             if isinstance(event, CallbackQuery):
-                await event.answer("❗️ Avval kanalga obuna bo'ling!", show_alert=True)
+                await event.answer("❗️ Avval barcha kanallarga obuna bo'ling!", show_alert=True)
                 try:
                     await event.message.answer(text, reply_markup=subscription_keyboard())
                 except:

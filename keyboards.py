@@ -8,10 +8,62 @@ from config import config
 
 def subscription_keyboard():
     """Kanalga obuna bo'lish klaviaturasi"""
+    from database import get_db, db_manager
+    
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/{config.CHANNEL_ID.replace('@', '')}")
-    )
+    
+    db = get_db()
+    try:
+        # Barcha kanallarni olish
+        channels = db_manager.get_all_channels(db)
+        
+        if channels:
+            # Har bir kanal uchun tugma
+            for channel in channels:
+                channel_id = channel.channel_id.strip()
+                
+                # URL yaratish
+                if channel_id.startswith("@"):
+                    # Username: @mychannel -> https://t.me/mychannel
+                    channel_username = channel_id[1:]  # @ ni olib tashlash
+                    builder.row(
+                        InlineKeyboardButton(
+                            text=f"📢 {channel.channel_name}",
+                            url=f"https://t.me/{channel_username}"
+                        )
+                    )
+                elif channel_id.startswith("-100"):
+                    # Private channel/group ID: -1001234567890 -> https://t.me/c/1234567890/1
+                    # -100 prefiksini olib tashlab, 't.me/c/' qo'shamiz
+                    numeric_id = channel_id[4:]  # -100 ni olib tashlash
+                    builder.row(
+                        InlineKeyboardButton(
+                            text=f"📢 {channel.channel_name} (ID: {channel_id})",
+                            callback_data=f"channel_info_{channel.id}"
+                        )
+                    )
+                else:
+                    # Boshqa holatlar
+                    builder.row(
+                        InlineKeyboardButton(
+                            text=f"📢 {channel.channel_name}",
+                            callback_data=f"channel_info_{channel.id}"
+                        )
+                    )
+        else:
+            # Agar kanallar bo'lmasa, config dan olish
+            if config.CHANNEL_ID:
+                channel_link = config.CHANNEL_ID.replace("@", "")
+                if not channel_link.lstrip("-").isdigit():
+                    builder.row(
+                        InlineKeyboardButton(
+                            text="📢 Kanalga obuna bo'lish",
+                            url=f"https://t.me/{channel_link}"
+                        )
+                    )
+    finally:
+        db.close()
+    
     builder.row(
         InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="check_subscription")
     )
@@ -67,6 +119,7 @@ def admin_keyboard():
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="📊 Bugungi statistika"))
     builder.row(KeyboardButton(text="📅 Boshqa kun statistikasi"))
+    builder.row(KeyboardButton(text="📢 Kanallar boshqaruvi"))
     builder.row(KeyboardButton(text="🔙 Asosiy menyu"))
     return builder.as_markup(resize_keyboard=True)
 
@@ -94,3 +147,25 @@ def remove_keyboard():
     """Klaviaturani o'chirish"""
     from aiogram.types import ReplyKeyboardRemove
     return ReplyKeyboardRemove()
+
+
+def channels_list_keyboard(channels):
+    """Kanallar ro'yxati klaviaturasi"""
+    builder = InlineKeyboardBuilder()
+    
+    # Har bir kanal uchun tugma
+    for channel in channels:
+        channel_name = channel.channel_name or channel.channel_id
+        builder.row(
+            InlineKeyboardButton(
+                text=f"❌ {channel_name}",
+                callback_data=f"delete_channel_{channel.channel_id}"
+            )
+        )
+    
+    # Kanal qo'shish tugmasi
+    builder.row(
+        InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_channel")
+    )
+    
+    return builder.as_markup()

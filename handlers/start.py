@@ -25,18 +25,22 @@ async def cmd_start(message: Message, state: FSMContext):
         # FSM state'ni tozalash
         await state.clear()
         
-        # Obunani tekshirish
-        is_subscribed = await check_subscription(message.bot, user_id)
+        # Admin ekanligini tekshirish
+        is_admin = user_id in config.ADMIN_IDS
         
-        if not is_subscribed:
-            # Obuna bo'lmagan
-            text = (
-                f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
-                "❗️ Botdan foydalanish uchun avval kanalimizga obuna bo'lishingiz kerak!\n\n"
-                "Obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
-            )
-            await message.answer(text, reply_markup=subscription_keyboard())
-            return
+        # Admin bo'lmasa obunani tekshirish
+        if not is_admin:
+            is_subscribed = await check_subscription(message.bot, user_id)
+            
+            if not is_subscribed:
+                # Obuna bo'lmagan
+                text = (
+                    f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
+                    "❗️ Botdan foydalanish uchun avval quyidagi kanallarga obuna bo'lishingiz kerak!\n\n"
+                    "Barcha kanallarga obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
+                )
+                await message.answer(text, reply_markup=subscription_keyboard())
+                return
         
         # Database'dan foydalanuvchini tekshirish
         db = get_db()
@@ -96,7 +100,7 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         is_subscribed = await check_subscription(callback.bot, user_id)
         
         if not is_subscribed:
-            await callback.answer("❗️ Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
+            await callback.answer("❗️ Siz hali barcha kanallarga obuna bo'lmadingiz! Iltimos, barcha kanallarga obuna bo'ling.", show_alert=True)
             return
         
         # Obuna bo'lgan - xabarni o'chirish va role selection

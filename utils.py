@@ -46,13 +46,40 @@ def format_phone(phone: str) -> str:
 
 
 async def check_subscription(bot: Bot, user_id: int) -> bool:
-    """Foydalanuvchi kanalga obuna bo'lganmi tekshirish"""
+    """Foydalanuvchi barcha majburiy kanallarga obuna bo'lganmi tekshirish"""
+    from database import get_db, db_manager
+    
+    db = get_db()
     try:
-        member = await bot.get_chat_member(config.CHANNEL_ID, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except TelegramAPIError as e:
-        logger.error(f"Error checking subscription: {e}")
-        return False
+        # Barcha kanallarni olish
+        channels = db_manager.get_all_channels(db)
+        
+        # Agar kanallar bo'lmasa - obuna talab qilinmaydi
+        if not channels:
+            # Config'dagi CHANNEL_ID ni tekshirish (agar bor bo'lsa)
+            if config.CHANNEL_ID:
+                try:
+                    member = await bot.get_chat_member(config.CHANNEL_ID, user_id)
+                    return member.status in ["member", "administrator", "creator"]
+                except TelegramAPIError as e:
+                    logger.error(f"Error checking subscription for {config.CHANNEL_ID}: {e}")
+                    return False
+            return True
+        
+        # Har bir kanalga obunani tekshirish
+        for channel in channels:
+            try:
+                member = await bot.get_chat_member(channel.channel_id, user_id)
+                if member.status not in ["member", "administrator", "creator"]:
+                    return False
+            except TelegramAPIError as e:
+                logger.error(f"Error checking subscription for {channel.channel_id}: {e}")
+                return False
+        
+        return True
+    
+    finally:
+        db.close()
 
 
 def format_datetime(dt: datetime) -> str:

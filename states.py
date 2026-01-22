@@ -21,3 +21,4 @@ class PassengerRegistration(StatesGroup):
 class AdminStates(StatesGroup):
     """Admin panel holatlari"""
     waiting_for_date = State()
+    waiting_for_channel = State()  # Kanal qo'shish
