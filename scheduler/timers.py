@@ -1,11 +1,11 @@
 """
-Scheduler - Taymerlar (7 va 6 daqiqalik timeout'lar)
+Taymerlar - 7 va 6 daqiqalik timeout'lar
 """
 import asyncio
 import logging
 from datetime import datetime, timedelta
 from aiogram import Bot
-from database import get_db, db_manager
+from database import get_db, db_manager, Order
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,6 @@ async def check_waiting_orders(bot: Bot):
     db = get_db()
     try:
         # Barcha waiting statusdagi buyurtmalarni olish
-        from database import Order
         waiting_orders = db.query(Order).filter(
             Order.status == "waiting",
             Order.service_type == "🚕 Taxi"
@@ -77,7 +76,6 @@ async def check_accepted_orders(bot: Bot):
     db = get_db()
     try:
         # Barcha accepted statusdagi buyurtmalarni olish
-        from database import Order
         accepted_orders = db.query(Order).filter(
             Order.status == "accepted",
             Order.service_type == "🚕 Taxi"

@@ -1,5 +1,5 @@
 """
-Utility funksiyalari
+Yordamchi funksiyalar - Validatsiya, formatlash
 """
 import re
 import logging
@@ -11,18 +11,26 @@ from config import config
 logger = logging.getLogger(__name__)
 
 
+# ===== VALIDATSIYA FUNKSIYALARI =====
+
 def validate_fullname(fullname: str) -> bool:
-    """Ism-familiyani tekshirish"""
+    """
+    Ism-familiyani tekshirish
+    - Faqat harflar, bo'sh joy va - ruxsat
+    - Maksimal 40 ta belgi
+    """
     if not fullname or len(fullname) > 40:
         return False
-    # Faqat harflar, bo'sh joy, ' va - ruxsat
     pattern = r"^[a-zA-Zа-яА-ЯёЁўЎқҚғҒҳҲ\s'\-]+$"
     return bool(re.match(pattern, fullname))
 
 
 def validate_phone(phone: str) -> bool:
-    """Telefon raqamini tekshirish"""
-    # +998XXXXXXXXX yoki 9 xonali raqam
+    """
+    Telefon raqamini tekshirish
+    - +998XXXXXXXXX formatida yoki
+    - 9 xonali raqam
+    """
     phone = phone.strip().replace(" ", "").replace("-", "")
     
     if phone.startswith("+998") and len(phone) == 13:
@@ -34,7 +42,10 @@ def validate_phone(phone: str) -> bool:
 
 
 def format_phone(phone: str) -> str:
-    """Telefon raqamini formatlash"""
+    """
+    Telefon raqamini formatlash
+    - Barcha raqamlarni +998XXXXXXXXX formatiga keltiradi
+    """
     phone = phone.strip().replace(" ", "").replace("-", "")
     
     if phone.startswith("+998"):
@@ -45,45 +56,29 @@ def format_phone(phone: str) -> str:
     return phone
 
 
-async def check_subscription(bot: Bot, user_id: int) -> bool:
-    """Foydalanuvchi barcha majburiy kanallarga obuna bo'lganmi tekshirish"""
-    from database import get_db, db_manager
-    
-    db = get_db()
-    try:
-        # Barcha kanallarni olish
-        channels = db_manager.get_all_channels(db)
-        
-        # Agar kanallar bo'lmasa - obuna talab qilinmaydi
-        if not channels:
-            # Config'dagi CHANNEL_ID ni tekshirish (agar bor bo'lsa)
-            if config.CHANNEL_ID:
-                try:
-                    member = await bot.get_chat_member(config.CHANNEL_ID, user_id)
-                    return member.status in ["member", "administrator", "creator"]
-                except TelegramAPIError as e:
-                    logger.error(f"Error checking subscription for {config.CHANNEL_ID}: {e}")
-                    return False
-            return True
-        
-        # Har bir kanalga obunani tekshirish
-        for channel in channels:
-            try:
-                member = await bot.get_chat_member(channel.channel_id, user_id)
-                if member.status not in ["member", "administrator", "creator"]:
-                    return False
-            except TelegramAPIError as e:
-                logger.error(f"Error checking subscription for {channel.channel_id}: {e}")
-                return False
-        
-        return True
-    
-    finally:
-        db.close()
+# ===== KANAL OBUNA TEKSHIRUVI =====
 
+async def check_subscription(bot: Bot, user_id: int) -> bool:
+    """
+    Foydalanuvchi kanalga obuna bo'lganmi tekshirish
+    - config.CHANNEL_ID kanalini tekshiradi
+    - member, administrator, creator statuslari qabul qilinadi
+    """
+    if not config.CHANNEL_ID:
+        return True  # Kanal yo'q bo'lsa, obuna talab qilinmaydi
+    
+    try:
+        member = await bot.get_chat_member(config.CHANNEL_ID, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except TelegramAPIError as e:
+        logger.error(f"Kanal obunasini tekshirishda xato {config.CHANNEL_ID}: {e}")
+        return False  # Xato bo'lsa, obuna bo'lmagan deb hisoblaymiz
+
+
+# ===== VAQT FORMATLASH =====
 
 def format_datetime(dt: datetime) -> str:
-    """Vaqtni formatlash"""
+    """Vaqtni formatlash - 26.01.2026 14:30"""
     return dt.strftime("%d.%m.%Y %H:%M")
 
 

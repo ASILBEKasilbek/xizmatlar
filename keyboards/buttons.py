@@ -2,9 +2,7 @@
 Klaviatura funksiyalari - Barcha tugmalar
 """
 from aiogram.types import (
-    ReplyKeyboardMarkup, 
     KeyboardButton, 
-    InlineKeyboardMarkup, 
     InlineKeyboardButton,
     ReplyKeyboardRemove
 )
@@ -76,6 +74,17 @@ def area_selection_keyboard():
     return builder.as_markup(resize_keyboard=True)
 
 
+# ===== LOKATSIYA SO'RASH =====
+
+def request_location_keyboard():
+    """Lokatsiya yuborishni so'rash klaviaturasi"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
 # ===== XIZMATLAR KLAVIATURASI (YO'LOVCHILAR) =====
 
 def services_keyboard():
@@ -135,25 +144,3 @@ def admin_keyboard():
 def remove_keyboard():
     """Klaviaturani o'chirish"""
     return ReplyKeyboardRemove()
-
-
-def channels_list_keyboard(channels):
-    """Kanallar ro'yxati klaviaturasi"""
-    builder = InlineKeyboardBuilder()
-    
-    # Har bir kanal uchun tugma
-    for channel in channels:
-        channel_name = channel.channel_name or channel.channel_id
-        builder.row(
-            InlineKeyboardButton(
-                text=f"❌ {channel_name}",
-                callback_data=f"delete_channel_{channel.channel_id}"
-            )
-        )
-    
-    # Kanal qo'shish tugmasi
-    builder.row(
-        InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_channel")
-    )
-    
-    return builder.as_markup()

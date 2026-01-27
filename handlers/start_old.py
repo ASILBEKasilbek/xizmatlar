@@ -1,5 +1,5 @@
 """
-Start handler - /start komandasi va obuna tekshiruvi
+Start handler - /start, subscription check, role selection
 """
 import logging
 from aiogram import Router, F
@@ -7,7 +7,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import get_db, db_manager
-from keyboards import subscription_keyboard, role_selection_keyboard, services_keyboard
+from keyboards import subscription_keyboard, role_selection_keyboard, services_keyboard, admin_keyboard
 from utils import check_subscription
 from config import config
 
@@ -18,14 +18,7 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    """
-    /start komandasi
-    1. FSM state'ni tozalash
-    2. Admin ekanligini tekshirish
-    3. Obuna tekshirish (admin bo'lmasa)
-    4. Database'dan foydalanuvchini tekshirish
-    5. Rol tanlash yoki xizmatlar klaviaturasini ko'rsatish
-    """
+    """Start komandasi"""
     try:
         user_id = message.from_user.id
         
@@ -43,8 +36,8 @@ async def cmd_start(message: Message, state: FSMContext):
                 # Obuna bo'lmagan
                 text = (
                     f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
-                    "❗️ Botdan foydalanish uchun avval kanalga obuna bo'lishingiz kerak!\n\n"
-                    "Kanalga obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
+                    "❗️ Botdan foydalanish uchun avval quyidagi kanallarga obuna bo'lishingiz kerak!\n\n"
+                    "Barcha kanallarga obuna bo'lgandan keyin <b>✅ Tasdiqlash</b> tugmasini bosing."
                 )
                 await message.answer(text, reply_markup=subscription_keyboard())
                 return
@@ -62,8 +55,7 @@ async def cmd_start(message: Message, state: FSMContext):
                         f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz.\n"
                         f"📱 Telefon: {user.phone}\n"
                         f"🚗 Mashina: {user.car_model}\n\n"
-                        f"Buyurtmalar {config.GROUP3} guruhida keladi.\n"
-                        f"Buyurtmani qabul qilish uchun guruhda \"✅ Qabul qilish\" tugmasini bosing."
+                        f"Buyurtmalar GROUP3 guruhida keladi."
                     )
                     await message.answer(text)
                 
@@ -76,6 +68,10 @@ async def cmd_start(message: Message, state: FSMContext):
                         f"Kerakli xizmatni tanlang:"
                     )
                     await message.answer(text, reply_markup=services_keyboard())
+                
+                elif user.user_type == "admin":
+                    text = f"👋 Xush kelibsiz, Admin!\n\nAdmin panelini tanlang:"
+                    await message.answer(text, reply_markup=admin_keyboard())
             
             else:
                 # Yangi foydalanuvchi - rol tanlash
@@ -91,16 +87,12 @@ async def cmd_start(message: Message, state: FSMContext):
     
     except Exception as e:
         logger.error(f"Error in cmd_start: {e}")
-        await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan /start bosing.")
+        await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
 
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription_callback(callback: CallbackQuery, state: FSMContext):
-    """
-    Obunani tekshirish callback
-    - Kanalga obuna bo'lganmi tekshiradi
-    - Agar obuna bo'lgan bo'lsa, /start kabi davom etadi
-    """
+    """Obunani tekshirish callback"""
     try:
         user_id = callback.from_user.id
         
@@ -108,16 +100,11 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         is_subscribed = await check_subscription(callback.bot, user_id)
         
         if not is_subscribed:
-            # Hali obuna bo'lmagan
-            await callback.answer(
-                "❗️ Siz hali kanalga obuna bo'lmadingiz!\n"
-                "Kanalga obuna bo'lgandan keyin qaytadan \"✅ Tasdiqlash\" tugmasini bosing.",
-                show_alert=True
-            )
+            await callback.answer("❗️ Siz hali barcha kanallarga obuna bo'lmadingiz! Iltimos, barcha kanallarga obuna bo'ling.", show_alert=True)
             return
         
-        # Obuna bo'lgan - davom ettirish
-        await callback.answer("✅ Obuna tasdiqlandi!")
+        # Obuna bo'lgan - xabarni o'chirish va role selection
+        await callback.message.delete()
         
         # Database'dan foydalanuvchini tekshirish
         db = get_db()
@@ -128,29 +115,25 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
                 # Ro'yxatdan o'tgan
                 if user.user_type == "driver":
                     text = (
-                        f"👋 Xush kelibsiz, {user.fullname}!\n\n"
-                        f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz.\n"
-                        f"📱 Telefon: {user.phone}\n"
-                        f"🚗 Mashina: {user.car_model}\n\n"
-                        f"Buyurtmalar {config.GROUP3} guruhida keladi."
+                        f"✅ Obuna tasdiqlandi!\n\n"
+                        f"👋 Xush kelibsiz, {user.fullname}!\n"
+                        f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz."
                     )
                     await callback.message.answer(text)
                 
                 elif user.user_type == "passenger":
                     text = (
-                        f"👋 Xush kelibsiz, {user.fullname}!\n\n"
-                        f"🧍‍♂️ Siz yo'lovchi sifatida ro'yxatdan o'tgansiz.\n"
-                        f"📱 Telefon: {user.phone}\n"
-                        f"📍 Hudud: {user.area}\n\n"
+                        f"✅ Obuna tasdiqlandi!\n\n"
+                        f"👋 Xush kelibsiz, {user.fullname}!\n"
                         f"Kerakli xizmatni tanlang:"
                     )
                     await callback.message.answer(text, reply_markup=services_keyboard())
             
             else:
-                # Yangi foydalanuvchi - rol tanlash
+                # Yangi foydalanuvchi
                 text = (
-                    f"👋 Assalomu alaykum, {callback.from_user.first_name}!\n\n"
-                    "🚖 Xizmatlar botiga xush kelibsiz!\n\n"
+                    f"✅ Obuna tasdiqlandi!\n\n"
+                    f"👋 Xush kelibsiz, {callback.from_user.first_name}!\n\n"
                     "Iltimos, rolingizni tanlang:"
                 )
                 await callback.message.answer(text, reply_markup=role_selection_keyboard())
@@ -158,12 +141,69 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         finally:
             db.close()
         
-        # Eski xabarni o'chirish
-        try:
-            await callback.message.delete()
-        except:
-            pass
+        await callback.answer()
     
     except Exception as e:
         logger.error(f"Error in check_subscription_callback: {e}")
-        await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
+        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
+
+
+@router.callback_query(F.data == "role_driver")
+async def role_driver_callback(callback: CallbackQuery, state: FSMContext):
+    """Haydovchi roli callback"""
+    try:
+        await callback.message.delete()
+        
+        from states import DriverRegistration
+        
+        text = (
+            "🚖 <b>Haydovchi ro'yxatdan o'tish</b>\n\n"
+            "Iltimos, ism va familiyangizni kiriting:\n"
+            "(Faqat harflar, maksimal 40 ta belgi)"
+        )
+        await callback.message.answer(text)
+        await state.set_state(DriverRegistration.waiting_for_fullname)
+        await callback.answer()
+    
+    except Exception as e:
+        logger.error(f"Error in role_driver_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
+
+
+@router.callback_query(F.data == "role_passenger")
+async def role_passenger_callback(callback: CallbackQuery, state: FSMContext):
+    """Yo'lovchi roli callback"""
+    try:
+        await callback.message.delete()
+        
+        from states import PassengerRegistration
+        
+        text = (
+            "🧍‍♂️ <b>Yo'lovchi ro'yxatdan o'tish</b>\n\n"
+            "Iltimos, ism va familiyangizni kiriting:\n"
+            "(Faqat harflar, maksimal 40 ta belgi)"
+        )
+        await callback.message.answer(text)
+        await state.set_state(PassengerRegistration.waiting_for_fullname)
+        await callback.answer()
+    
+    except Exception as e:
+        logger.error(f"Error in role_passenger_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
+
+
+@router.callback_query(F.data == "role_support")
+async def role_support_callback(callback: CallbackQuery):
+    """Qo'llab-quvvatlash callback"""
+    try:
+        text = (
+            "🆘 <b>Qo'llab-quvvatlash</b>\n\n"
+            "Savollar yoki muammolar bo'lsa, admin bilan bog'laning:\n"
+            f"@admin_username"
+        )
+        await callback.message.answer(text)
+        await callback.answer()
+    
+    except Exception as e:
+        logger.error(f"Error in role_support_callback: {e}")
+        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)

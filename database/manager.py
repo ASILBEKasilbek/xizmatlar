@@ -1,12 +1,12 @@
 """
-Ma'lumotlar bazasi - User, Order modellari va CRUD funksiyalari
+Database manager - CRUD operatsiyalari
 """
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config import config
+from .models import Base, User, Order, ProductCooldown
 
 logger = logging.getLogger(__name__)
 
@@ -18,83 +18,7 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-Base = declarative_base()
 
-
-# ===== MODELS =====
-
-class User(Base):
-    """
-    Foydalanuvchilar jadvali
-    - Haydovchilar va yo'lovchilar
-    - Bir foydalanuvchi faqat bitta rol tanlashi mumkin
-    """
-    __tablename__ = "users"
-    
-    user_id = Column(Integer, primary_key=True, index=True)
-    fullname = Column(String(100), nullable=False)
-    phone = Column(String(20), nullable=False)
-    user_type = Column(String(20), nullable=False)  # driver yoki passenger
-    
-    # Faqat haydovchilar uchun
-    car_model = Column(String(100), nullable=True)
-    
-    # Faqat yo'lovchilar uchun
-    area = Column(String(100), nullable=True)
-    
-    telegram_name = Column(String(100), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Order(Base):
-    """
-    Buyurtmalar jadvali
-    - Taxi, Non, Yem buyurtmalari
-    """
-    __tablename__ = "orders"
-    
-    order_id = Column(Integer, primary_key=True, autoincrement=True)
-    
-    # Yo'lovchi ma'lumotlari
-    passenger_id = Column(Integer, nullable=False, index=True)
-    passenger_name = Column(String(100), nullable=False)
-    passenger_phone = Column(String(20), nullable=False)
-    passenger_area = Column(String(100), nullable=True)
-    
-    # Buyurtma turi va guruhi
-    service_type = Column(String(50), nullable=False)  # 🚕 Taxi, 🥖 Non, 🌾 Yem
-    group_chat = Column(String(100), nullable=False)   # Qaysi guruhga yuborilgan
-    
-    # Haydovchi ma'lumotlari (faqat taxi uchun)
-    driver_id = Column(Integer, nullable=True, index=True)
-    driver_name = Column(String(100), nullable=True)
-    
-    # Status
-    status = Column(String(20), default="waiting")  # waiting, accepted, confirmed, cancelled
-    reject_count = Column(Integer, default=0)       # Necha marta rad etilgan
-    
-    # Guruh xabar ID'si (o'chirish uchun)
-    group_message_id = Column(Integer, nullable=True)
-    
-    # Vaqtlar
-    created_at = Column(DateTime, default=datetime.utcnow)
-    accepted_at = Column(DateTime, nullable=True)
-    confirmed_at = Column(DateTime, nullable=True)
-
-
-class ProductCooldown(Base):
-    """
-    Non/Yem buyurtmalar uchun 3 soatlik cheklov jadvali
-    """
-    __tablename__ = "product_cooldown"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    product_type = Column(String(50), nullable=False)  # 🥖 Non yoki 🌾 Yem
-    last_order_time = Column(DateTime, nullable=False)
-
-
-# ===== DATABASE INIT =====
 
 def init_db():
     """Database jadvallarini yaratish"""
@@ -110,8 +34,6 @@ def get_db() -> Session:
     """Database session olish"""
     return SessionLocal()
 
-
-# ===== DATABASE MANAGER =====
 
 class DatabaseManager:
     """Ma'lumotlar bazasi bilan ishlash uchun barcha funksiyalar"""
@@ -131,13 +53,12 @@ class DatabaseManager:
         phone: str, 
         user_type: str, 
         car_model: str = None, 
-        area: str = None, 
+        area: str = None,
+        latitude: str = None,
+        longitude: str = None,
         telegram_name: str = None
     ) -> User:
-        """
-        Yangi foydalanuvchi yaratish
-        - user_type: 'driver' yoki 'passenger'
-        """
+        """Yangi foydalanuvchi yaratish"""
         try:
             user = User(
                 user_id=user_id,
@@ -146,6 +67,8 @@ class DatabaseManager:
                 user_type=user_type,
                 car_model=car_model,
                 area=area,
+                latitude=latitude,
+                longitude=longitude,
                 telegram_name=telegram_name
             )
             db.add(user)
@@ -180,10 +103,7 @@ class DatabaseManager:
         service_type: str, 
         group_chat: str
     ) -> Order:
-        """
-        Yangi buyurtma yaratish
-        - service_type: '🚕 Taxi', '🥖 Non', '🌾 Yem'
-        """
+        """Yangi buyurtma yaratish"""
         try:
             order = Order(
                 passenger_id=passenger_id,
@@ -211,10 +131,7 @@ class DatabaseManager:
     
     @staticmethod
     def get_active_taxi_order(db: Session, passenger_id: int) -> Order:
-        """
-        Yo'lovchining aktiv taxi buyurtmasini olish
-        - Faqat waiting, accepted statusdagi buyurtmalar
-        """
+        """Yo'lovchining aktiv taxi buyurtmasini olish"""
         return db.query(Order).filter(
             Order.passenger_id == passenger_id,
             Order.service_type == "🚕 Taxi",
@@ -223,10 +140,7 @@ class DatabaseManager:
     
     @staticmethod
     def get_driver_active_order(db: Session, driver_id: int) -> Order:
-        """
-        Haydovchining aktiv buyurtmasini olish
-        - Faqat accepted statusdagi buyurtmalar
-        """
+        """Haydovchining aktiv buyurtmasini olish"""
         return db.query(Order).filter(
             Order.driver_id == driver_id,
             Order.status == "accepted"
@@ -240,10 +154,7 @@ class DatabaseManager:
         driver_id: int = None, 
         driver_name: str = None
     ):
-        """
-        Buyurtma statusini yangilash
-        - waiting -> accepted -> confirmed yoki cancelled
-        """
+        """Buyurtma statusini yangilash"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -296,25 +207,20 @@ class DatabaseManager:
     
     @staticmethod
     def check_product_cooldown(db: Session, user_id: int, product_type: str) -> bool:
-        """
-        Non/Yem uchun 3 soatlik cheklovni tekshirish
-        - True: cheklov mavjud (buyurtma bera olmaydi)
-        - False: cheklov yo'q (buyurtma berishi mumkin)
-        """
+        """Non/Yem uchun 3 soatlik cheklovni tekshirish"""
         cooldown = db.query(ProductCooldown).filter(
             ProductCooldown.user_id == user_id,
             ProductCooldown.product_type == product_type
         ).first()
         
         if not cooldown:
-            return False  # Hech qachon buyurtma bermagan
+            return False
         
-        # 3 soat o'tganmi?
         time_diff = datetime.utcnow() - cooldown.last_order_time
         if time_diff < timedelta(seconds=config.PRODUCT_COOLDOWN):
-            return True  # Cheklov hali mavjud
+            return True
         
-        return False  # Cheklov o'tgan
+        return False
     
     @staticmethod
     def get_remaining_cooldown_time(db: Session, user_id: int, product_type: str) -> int:

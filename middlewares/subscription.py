@@ -1,5 +1,5 @@
 """
-Middleware'lar - Kanalga obuna tekshiruvi
+Kanalga obuna tekshiruvi middleware
 """
 import logging
 from typing import Callable, Dict, Any, Awaitable

@@ -73,6 +73,3 @@ class UserRole:
     """Foydalanuvchi rollari"""
     DRIVER = "driver"
     PASSENGER = "passenger"
-
-    PASSENGER = "passenger"
-    ADMIN = "admin"
