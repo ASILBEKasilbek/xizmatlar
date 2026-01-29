@@ -221,20 +221,17 @@ async def driver_car_model_handler(message: Message, state: FSMContext):
             except Exception as e:
                 logger.error(f"Error sending to GROUP1: {e}")
             
-            # Foydalanuvchiga xabar
             success_text = (
                 "✅ <b>Ro'yxatdan o'tish muvaffaqiyatli tugadi!</b>\n\n"
                 f"👤 Ism: {fullname}\n"
                 f"📞 Telefon: {phone}\n"
                 f"🚗 Mashina: {car_model}\n\n"
-                f"Buyurtmalarni qabul qilish uchun adminga yozing. @admin\n"
+                f"Buyurtmalarni qabul qilish uchun adminga yozing. @SAT_mathuz\n"
             )
             await message.answer(success_text)
             
         finally:
             db.close()
-        
-        # State'ni tozalash
         await state.clear()
     
     except Exception as e:

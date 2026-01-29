@@ -107,7 +107,7 @@ async def taxi_order_handler(message: Message):
 @router.message(F.text == "💬 Qo'llab-quvvatlash")
 async def quvatlash(message: Message):
     await message.answer("""💬 Qo'llab-quvvatlash
-Telegram:usernamiz yuq ekan tashlasayiz quyib quyaman
+Telegram: @SAT_mathuz
 """)
 
 
