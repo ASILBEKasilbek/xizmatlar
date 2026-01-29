@@ -20,26 +20,14 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
-
-# ===== MODELS =====
-
 class User(Base):
-    """
-    Foydalanuvchilar jadvali
-    - Haydovchilar va yo'lovchilar
-    - Bir foydalanuvchi faqat bitta rol tanlashi mumkin
-    """
     __tablename__ = "users"
     
     user_id = Column(Integer, primary_key=True, index=True)
     fullname = Column(String(100), nullable=False)
     phone = Column(String(20), nullable=False)
-    user_type = Column(String(20), nullable=False)  # driver yoki passenger
-    
-    # Faqat haydovchilar uchun
+    user_type = Column(String(20), nullable=False) 
     car_model = Column(String(100), nullable=True)
-    
-    # Faqat yo'lovchilar uchun
     area = Column(String(100), nullable=True)
     
     telegram_name = Column(String(100), nullable=True)
@@ -47,10 +35,6 @@ class User(Base):
 
 
 class Order(Base):
-    """
-    Buyurtmalar jadvali
-    - Taxi, Non, Yem buyurtmalari
-    """
     __tablename__ = "orders"
     
     order_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -83,9 +67,6 @@ class Order(Base):
 
 
 class ProductCooldown(Base):
-    """
-    Non/Yem buyurtmalar uchun 3 soatlik cheklov jadvali
-    """
     __tablename__ = "product_cooldown"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -94,10 +75,7 @@ class ProductCooldown(Base):
     last_order_time = Column(DateTime, nullable=False)
 
 
-# ===== DATABASE INIT =====
-
 def init_db():
-    """Database jadvallarini yaratish"""
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Database initialized successfully")
@@ -107,17 +85,12 @@ def init_db():
 
 
 def get_db() -> Session:
-    """Database session olish"""
     return SessionLocal()
 
 
 # ===== DATABASE MANAGER =====
 
 class DatabaseManager:
-    """Ma'lumotlar bazasi bilan ishlash uchun barcha funksiyalar"""
-    
-    # ===== USER OPERATIONS =====
-    
     @staticmethod
     def get_user(db: Session, user_id: int) -> User:
         """Foydalanuvchini olish"""
@@ -134,10 +107,6 @@ class DatabaseManager:
         area: str = None, 
         telegram_name: str = None
     ) -> User:
-        """
-        Yangi foydalanuvchi yaratish
-        - user_type: 'driver' yoki 'passenger'
-        """
         try:
             user = User(
                 user_id=user_id,
@@ -160,16 +129,13 @@ class DatabaseManager:
     
     @staticmethod
     def get_all_drivers(db: Session):
-        """Barcha haydovchilarni olish"""
         return db.query(User).filter(User.user_type == "driver").all()
     
     @staticmethod
     def get_all_passengers(db: Session):
-        """Barcha yo'lovchilarni olish"""
         return db.query(User).filter(User.user_type == "passenger").all()
-    
-    # ===== ORDER OPERATIONS =====
-    
+
+
     @staticmethod
     def create_order(
         db: Session, 
@@ -180,10 +146,6 @@ class DatabaseManager:
         service_type: str, 
         group_chat: str
     ) -> Order:
-        """
-        Yangi buyurtma yaratish
-        - service_type: '🚕 Taxi', '🥖 Non', '🌾 Yem'
-        """
         try:
             order = Order(
                 passenger_id=passenger_id,
@@ -206,15 +168,10 @@ class DatabaseManager:
     
     @staticmethod
     def get_order(db: Session, order_id: int) -> Order:
-        """Buyurtmani ID bo'yicha olish"""
         return db.query(Order).filter(Order.order_id == order_id).first()
     
     @staticmethod
     def get_active_taxi_order(db: Session, passenger_id: int) -> Order:
-        """
-        Yo'lovchining aktiv taxi buyurtmasini olish
-        - Faqat waiting, accepted statusdagi buyurtmalar
-        """
         return db.query(Order).filter(
             Order.passenger_id == passenger_id,
             Order.service_type == "🚕 Taxi",
@@ -223,10 +180,6 @@ class DatabaseManager:
     
     @staticmethod
     def get_driver_active_order(db: Session, driver_id: int) -> Order:
-        """
-        Haydovchining aktiv buyurtmasini olish
-        - Faqat accepted statusdagi buyurtmalar
-        """
         return db.query(Order).filter(
             Order.driver_id == driver_id,
             Order.status == "accepted"
@@ -240,10 +193,6 @@ class DatabaseManager:
         driver_id: int = None, 
         driver_name: str = None
     ):
-        """
-        Buyurtma statusini yangilash
-        - waiting -> accepted -> confirmed yoki cancelled
-        """
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -268,7 +217,6 @@ class DatabaseManager:
     
     @staticmethod
     def increment_reject_count(db: Session, order_id: int):
-        """Buyurtma rad etilishlar sonini oshirish"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -282,7 +230,6 @@ class DatabaseManager:
     
     @staticmethod
     def update_order_group_message(db: Session, order_id: int, message_id: int):
-        """Buyurtmaning guruh xabar ID'sini saqlash"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -296,11 +243,6 @@ class DatabaseManager:
     
     @staticmethod
     def check_product_cooldown(db: Session, user_id: int, product_type: str) -> bool:
-        """
-        Non/Yem uchun 3 soatlik cheklovni tekshirish
-        - True: cheklov mavjud (buyurtma bera olmaydi)
-        - False: cheklov yo'q (buyurtma berishi mumkin)
-        """
         cooldown = db.query(ProductCooldown).filter(
             ProductCooldown.user_id == user_id,
             ProductCooldown.product_type == product_type
@@ -318,7 +260,6 @@ class DatabaseManager:
     
     @staticmethod
     def get_remaining_cooldown_time(db: Session, user_id: int, product_type: str) -> int:
-        """Qolgan cheklov vaqtini (soniyalarda) olish"""
         cooldown = db.query(ProductCooldown).filter(
             ProductCooldown.user_id == user_id,
             ProductCooldown.product_type == product_type
@@ -334,7 +275,6 @@ class DatabaseManager:
     
     @staticmethod
     def set_product_cooldown(db: Session, user_id: int, product_type: str):
-        """Non/Yem buyurtma berganidan keyin cooldown o'rnatish"""
         try:
             cooldown = db.query(ProductCooldown).filter(
                 ProductCooldown.user_id == user_id,

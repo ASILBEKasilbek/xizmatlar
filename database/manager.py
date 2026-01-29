@@ -2,11 +2,11 @@
 Database manager - CRUD operatsiyalari
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config import config
-from .models import Base, User, Order, ProductCooldown
+from .models import Base, User, Order, ProductCooldown, DailyStats
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +262,123 @@ class DatabaseManager:
         except Exception as e:
             db.rollback()
             logger.error(f"❌ Error setting cooldown: {e}")
+    
+    # ===== STATISTIKA OPERATIONS =====
+    
+    @staticmethod
+    def get_daily_stats(db: Session, target_date: date = None):
+        """Kunlik statistikani olish"""
+        if target_date is None:
+            target_date = date.today()
+        
+        return db.query(DailyStats).filter(
+            DailyStats.date >= datetime.combine(target_date, datetime.min.time()),
+            DailyStats.date < datetime.combine(target_date + timedelta(days=1), datetime.min.time())
+        ).all()
+    
+    @staticmethod
+    def update_stats_order_created(db: Session, user_id: int, user_name: str):
+        """Buyurtma yaratilganda statistikani yangilash"""
+        try:
+            today = date.today()
+            
+            # Yo'lovchi statistikasi
+            stats = db.query(DailyStats).filter(
+                DailyStats.date >= datetime.combine(today, datetime.min.time()),
+                DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
+                DailyStats.user_id == user_id,
+                DailyStats.user_type == "passenger"
+            ).first()
+            
+            if stats:
+                stats.orders_count += 1
+            else:
+                stats = DailyStats(
+                    date=datetime.utcnow(),
+                    user_id=user_id,
+                    user_name=user_name,
+                    user_type="passenger",
+                    orders_count=1,
+                    confirmed_count=0,
+                    rejected_count=0
+                )
+                db.add(stats)
+            
+            db.commit()
+            logger.info(f"✅ Stats updated: order created by {user_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Error updating stats: {e}")
+    
+    @staticmethod
+    def update_stats_order_confirmed(db: Session, driver_id: int, driver_name: str):
+        """Buyurtma tasdiqlanganda statistikani yangilash"""
+        try:
+            today = date.today()
+            
+            # Haydovchi statistikasi
+            stats = db.query(DailyStats).filter(
+                DailyStats.date >= datetime.combine(today, datetime.min.time()),
+                DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
+                DailyStats.user_id == driver_id,
+                DailyStats.user_type == "driver"
+            ).first()
+            
+            if stats:
+                stats.confirmed_count += 1
+            else:
+                stats = DailyStats(
+                    date=datetime.utcnow(),
+                    user_id=driver_id,
+                    user_name=driver_name,
+                    user_type="driver",
+                    orders_count=0,
+                    confirmed_count=1,
+                    rejected_count=0
+                )
+                db.add(stats)
+            
+            db.commit()
+            logger.info(f"✅ Stats updated: order confirmed by {driver_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Error updating stats: {e}")
+    
+    @staticmethod
+    def update_stats_order_rejected(db: Session, driver_id: int, driver_name: str):
+        """Buyurtma rad etilganda statistikani yangilash"""
+        try:
+            today = date.today()
+            
+            # Haydovchi statistikasi
+            stats = db.query(DailyStats).filter(
+                DailyStats.date >= datetime.combine(today, datetime.min.time()),
+                DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
+                DailyStats.user_id == driver_id,
+                DailyStats.user_type == "driver"
+            ).first()
+            
+            if stats:
+                stats.rejected_count += 1
+            else:
+                stats = DailyStats(
+                    date=datetime.utcnow(),
+                    user_id=driver_id,
+                    user_name=driver_name,
+                    user_type="driver",
+                    orders_count=0,
+                    confirmed_count=0,
+                    rejected_count=1
+                )
+                db.add(stats)
+            
+            db.commit()
+            logger.info(f"✅ Stats updated: order rejected by {driver_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Error updating stats: {e}")
 
 
+db_manager = DatabaseManager()
 # Global instance
 db_manager = DatabaseManager()

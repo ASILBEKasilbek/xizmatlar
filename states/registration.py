@@ -15,4 +15,4 @@ class PassengerRegistration(StatesGroup):
     """Yo'lovchi ro'yxatdan o'tish holatlari"""
     waiting_for_fullname = State()
     waiting_for_phone = State()
-    waiting_for_location = State()
+    waiting_for_area = State()

@@ -107,68 +107,73 @@ async def accept_order_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("confirm_"))
 async def confirm_order_callback(callback: CallbackQuery):
-    """
-    Buyurtmani tasdiqlash (haydovchi)
-    - Haydovchi yo'lovchi bilan gaplashgandan keyin
-    - Buyurtma yakunlanadi
-    """
     try:
         order_id = int(callback.data.split("_")[1])
         driver_id = callback.from_user.id
-        
+
         db = get_db()
         try:
-            # Buyurtmani olish
             order = db_manager.get_order(db, order_id)
-            
             if not order:
                 await callback.answer("❌ Buyurtma topilmadi!", show_alert=True)
                 return
-            
+
             if order.driver_id != driver_id:
                 await callback.answer("❌ Bu buyurtma sizga tegishli emas!", show_alert=True)
                 return
-            
+
             if order.status != "accepted":
                 await callback.answer("❌ Bu buyurtma allaqachon yakunlangan!", show_alert=True)
                 return
-            
+
+            # ✅ driver info (car rusumi) ni olish
+            driver = db_manager.get_user(db, driver_id)
+            driver_car_model = (driver.car_model if driver and driver.car_model else "Noma'lum")
+
             # Buyurtmani tasdiqlash
             db_manager.update_order_status(db, order_id, "confirmed")
-            
+
+            # Statistikani yangilash
+            db_manager.update_stats_order_confirmed(db, driver_id, order.driver_name)
+
             # Haydovchiga xabar
             await callback.message.edit_text(
-                f"✅ <b>Buyurtma #{order_id} tasdiqlandi!</b>\n\n"
-                f"Rahmat, {order.driver_name}!"
+                f"✅ <b>TASDIQLANDI</b>\n\n"
+                f"👤 Yo'lovchi: {order.passenger_name}\n"
+                f"📞 Yo'lovchi tel: {order.passenger_phone}\n"
+                f"📍 Hudud: {order.passenger_area}\n\n"
+                f"Rahmat!"
             )
-            
+
             # Yo'lovchiga xabar
             passenger_text = (
                 f"✅ <b>Buyurtmangiz tasdiqlandi!</b>\n\n"
                 f"📋 Buyurtma ID: #{order_id}\n"
-                f"🚖 Haydovchi: {order.driver_name}\n\n"
+                f"🚖 Haydovchi: {order.driver_name}\n"
+                f"🚗 Mashina rusumi: {driver_car_model}\n\n"
+                f"Xizmatdan foydalanganingiz uchun rahmat.\n\n"
                 f"Tez orada haydovchi yetib keladi!"
             )
             try:
                 await callback.bot.send_message(order.passenger_id, passenger_text)
             except Exception as e:
                 logger.error(f"Error sending confirmation to passenger: {e}")
-            
+
             # GROUP3 ga xabar
             try:
                 await callback.bot.send_message(
-                    config.GROUP3, 
-                    f"✅ Buyurtma #{order_id} tasdiqlandi! ({order.driver_name})"
+                    config.GROUP3,
+                    f"✅ Buyurtma #{order_id} tasdiqlandi! ({order.driver_name}, {driver_car_model})"
                 )
             except Exception as e:
                 logger.error(f"Error sending confirmation to GROUP3: {e}")
-            
+
             await callback.answer("✅ Buyurtma tasdiqlandi!")
             logger.info(f"Order #{order_id} confirmed by driver {driver_id}")
-        
+
         finally:
             db.close()
-    
+
     except Exception as e:
         logger.error(f"Error in confirm_order_callback: {e}")
         await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
@@ -176,11 +181,6 @@ async def confirm_order_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("reject_"))
 async def reject_order_callback(callback: CallbackQuery):
-    """
-    Buyurtmani rad etish (haydovchi)
-    - 1-2 marta rad etilsa, qayta guruhga chiqariladi
-    - 3 marta rad etilsa, butunlay bekor qilinadi
-    """
     try:
         order_id = int(callback.data.split("_")[1])
         driver_id = callback.from_user.id
@@ -207,6 +207,9 @@ async def reject_order_callback(callback: CallbackQuery):
             
             # Buyurtmani qayta olish (yangilangan reject_count bilan)
             order = db_manager.get_order(db, order_id)
+            
+            # Statistikani yangilash
+            db_manager.update_stats_order_rejected(db, driver_id, order.driver_name)
             
             # Haydovchiga xabar
             await callback.message.edit_text(

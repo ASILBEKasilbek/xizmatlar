@@ -84,6 +84,7 @@ def services_keyboard():
     builder.row(KeyboardButton(text="🚕 Taxi"))
     builder.row(KeyboardButton(text="🥖 Non buyurtma berish"))
     builder.row(KeyboardButton(text="🌾 Yem buyurtma berish"))
+    builder.row(KeyboardButton(text="💬 Qo'llab-quvvatlash"))
     return builder.as_markup(resize_keyboard=True)
 
 

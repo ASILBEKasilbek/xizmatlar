@@ -2,5 +2,6 @@
 States moduli - FSM states
 """
 from .registration import DriverRegistration, PassengerRegistration
+from .admin import AdminStates
 
-__all__ = ['DriverRegistration', 'PassengerRegistration']
+__all__ = ['DriverRegistration', 'PassengerRegistration', 'AdminStates']

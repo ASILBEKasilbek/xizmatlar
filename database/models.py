@@ -79,3 +79,20 @@ class ProductCooldown(Base):
     user_id = Column(Integer, nullable=False, index=True)
     product_type = Column(String(50), nullable=False)  # 🥖 Non yoki 🌾 Yem
     last_order_time = Column(DateTime, nullable=False)
+
+
+class DailyStats(Base):
+    """
+    Kunlik statistika jadvali
+    """
+    __tablename__ = "daily_stats"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(DateTime, nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    user_name = Column(String(100), nullable=False)
+    user_type = Column(String(20), nullable=False)  # driver yoki passenger
+    
+    orders_count = Column(Integer, default=0)      # Buyurtmalar soni
+    confirmed_count = Column(Integer, default=0)   # Tasdiqlangan
+    rejected_count = Column(Integer, default=0)    # Rad etilgan

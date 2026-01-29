@@ -55,17 +55,20 @@ async def taxi_order_handler(message: Message):
                 passenger_id=user_id,
                 passenger_name=user.fullname,
                 passenger_phone=user.phone,
-                passenger_area=f"{user.latitude},{user.longitude}" if user.latitude else "Lokatsiya yo'q",
+                passenger_area=user.area,
                 service_type=ServiceType.TAXI,
                 group_chat=config.GROUP3
             )
+            
+            # Statistikani yangilash
+            db_manager.update_stats_order_created(db, user_id, user.fullname)
             
             # GROUP3 ga yuborish (telefon raqamsiz)
             group_text = (
                 "🚕 <b>YANGI TAXI BUYURTMA</b>\n\n"
                 f"📋 Buyurtma ID: #{order.order_id}\n"
                 f"👤 Yo'lovchi: {user.fullname}\n"
-                f"📍 Lokatsiya: {user.latitude},{user.longitude}\n" if user.latitude else "📍 Lokatsiya: Yo'q\n"
+                f"📍 Hudud: {user.area}\n"
             )
             
             try:
@@ -85,11 +88,11 @@ async def taxi_order_handler(message: Message):
             
             # Foydalanuvchiga xabar
             success_text = (
-                "✅ <b>Buyurtmangiz qabul qilindi!</b>\n\n"
-                f"📋 Buyurtma ID: #{order.order_id}\n"
-                f"⏳ Status: Kutilmoqda...\n\n"
-                f"Haydovchilar {config.GROUP3} guruhida buyurtmangizni ko'rishadi.\n"
-                f"Tez orada haydovchi sizga bog'lanadi!"
+                "✅ <b>Buyurtmangiz qabul qilindi.</b> Iltimos kuting, sizga aloqaga chiqishadi."
+                # f"📋 Buyurtma ID: #{order.order_id}\n"
+                # f"⏳ Status: Kutilmoqda...\n\n"
+                # f"Haydovchilar {config.GROUP3} guruhida buyurtmangizni ko'rishadi.\n"
+                # f"Iltimos kuting, sizga aloqaga chiqishadi."
             )
             await message.answer(success_text)
             
@@ -101,13 +104,15 @@ async def taxi_order_handler(message: Message):
         await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
 
+@router.message(F.text == "💬 Qo'llab-quvvatlash")
+async def quvatlash(message: Message):
+    await message.answer("""💬 Qo'llab-quvvatlash
+Telegram:usernamiz yuq ekan tashlasayiz quyib quyaman
+""")
+
+
 @router.message(F.text == "🥖 Non buyurtma berish")
 async def bread_order_handler(message: Message):
-    """
-    Non buyurtma berish
-    - 3 soatlik cheklov
-    - Foydalanuvchi ma'lumotlari GROUP4 ga yuboriladi
-    """
     try:
         user_id = message.from_user.id
         
@@ -144,7 +149,7 @@ async def bread_order_handler(message: Message):
                 "🥖 <b>YANGI NON BUYURTMA</b>\n\n"
                 f"👤 Ism: {user.fullname}\n"
                 f"📞 Telefon: {user.phone}\n"
-                f"📍 Lokatsiya: {user.latitude},{user.longitude}\n" if user.latitude else "📍 Lokatsiya: Yo'q\n"
+                f"📍 Hudud: {user.area}\n"
                 f"📱 Telegram: @{user.telegram_name}\n"
                 f"🆔 ID: {user_id}"
             )
@@ -161,13 +166,13 @@ async def bread_order_handler(message: Message):
             
             # Foydalanuvchiga xabar
             success_text = (
-                "✅ <b>Non buyurtmangiz qabul qilindi!</b>\n\n"
-                f"👤 Ism: {user.fullname}\n"
-                f"📞 Telefon: {user.phone}\n"
-                f"📍 Lokatsiya saqlandi\n\n"
-                f"Ma'lumotlaringiz {config.GROUP4} guruhiga yuborildi.\n"
-                f"Tez orada siz bilan bog'lanishadi!\n\n"
-                f"⏳ Keyingi buyurtma 3 soatdan keyin!"
+                "✅ <b>Buyurtmangiz qabul qilindi.</b> Iltimos kuting, sizga aloqaga chiqishadi."
+                # f"👤 Ism: {user.fullname}\n"
+                # f"📞 Telefon: {user.phone}\n"
+                # f"📍 Hudud: {user.area}\n\n"
+                # f"Ma'lumotlaringiz {config.GROUP4} guruhiga yuborildi.\n"
+                # f"Tez orada siz bilan bog'lanishadi!\n\n"
+                # f"⏳ Keyingi buyurtma 3 soatdan keyin!"
             )
             await message.answer(success_text)
             
@@ -181,17 +186,12 @@ async def bread_order_handler(message: Message):
 
 @router.message(F.text == "🌾 Yem buyurtma berish")
 async def feed_order_handler(message: Message):
-    """
-    Yem buyurtma berish
-    - 3 soatlik cheklov
-    - Foydalanuvchi ma'lumotlari GROUP5 ga yuboriladi
-    """
     try:
         user_id = message.from_user.id
         
         db = get_db()
         try:
-            # Foydalanuvchini tekshirish
+
             user = db_manager.get_user(db, user_id)
             
             if not user:
@@ -202,7 +202,6 @@ async def feed_order_handler(message: Message):
                 await message.answer("❌ Faqat yo'lovchilar yem buyurtma qilishi mumkin!")
                 return
             
-            # 3 soatlik cheklovni tekshirish
             has_cooldown = db_manager.check_product_cooldown(db, user_id, ServiceType.FEED)
             
             if has_cooldown:
@@ -217,12 +216,11 @@ async def feed_order_handler(message: Message):
                 )
                 return
             
-            # GROUP5 ga foydalanuvchi ma'lumotlarini yuborish
             group_text = (
                 "🌾 <b>YANGI YEM BUYURTMA</b>\n\n"
                 f"👤 Ism: {user.fullname}\n"
                 f"📞 Telefon: {user.phone}\n"
-                f"📍 Lokatsiya: {user.latitude},{user.longitude}\n" if user.latitude else "📍 Lokatsiya: Yo'q\n"
+                f"📍 Hudud: {user.area}\n"
                 f"📱 Telegram: @{user.telegram_name}\n"
                 f"🆔 ID: {user_id}"
             )
@@ -239,13 +237,14 @@ async def feed_order_handler(message: Message):
             
             # Foydalanuvchiga xabar
             success_text = (
-                "✅ <b>Yem buyurtmangiz qabul qilindi!</b>\n\n"
-                f"👤 Ism: {user.fullname}\n"
-                f"📞 Telefon: {user.phone}\n"
-                f"📍 Lokatsiya saqlandi\n\n"
-                f"Ma'lumotlaringiz {config.GROUP5} guruhiga yuborildi.\n"
-                f"Tez orada siz bilan bog'lanishadi!\n\n"
-                f"⏳ Keyingi buyurtma 3 soatdan keyin!"
+                # "✅ <b>Yem buyurtmangiz qabul qilindi!</b>\n\n"
+                "✅ <b>Buyurtmangiz qabul qilindi.</b> Iltimos kuting, sizga aloqaga chiqishadi."
+                # f"👤 Ism: {user.fullname}\n"
+                # f"📞 Telefon: {user.phone}\n"
+                # f"📍 Hudud: {user.area}\n\n"
+                # f"Ma'lumotlaringiz {config.GROUP5} guruhiga yuborildi.\n"
+                # f"Tez orada siz bilan bog'lanishadi!\n\n"
+                # f"⏳ Keyingi buyurtma 3 soatdan keyin!"
             )
             await message.answer(success_text)
             

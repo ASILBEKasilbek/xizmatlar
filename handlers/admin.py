@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import get_db, db_manager
-from keyboards import admin_keyboard, services_keyboard, channels_list_keyboard
+from keyboards import admin_keyboard, services_keyboard
 from utils import format_date
 from states import AdminStates
 from config import config

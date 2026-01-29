@@ -93,6 +93,8 @@ def services_keyboard():
     builder.row(KeyboardButton(text="🚕 Taxi"))
     builder.row(KeyboardButton(text="🥖 Non buyurtma berish"))
     builder.row(KeyboardButton(text="🌾 Yem buyurtma berish"))
+    builder.row(KeyboardButton(text="💬 Qo'llab-quvvatlash"))
+    
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -133,9 +135,10 @@ def driver_action_keyboard(order_id: int):
 def admin_keyboard():
     """Admin panel klaviaturasi"""
     builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="📊 Statistika"))
+    builder.row(KeyboardButton(text="📊 Bugungi statistika"))
+    builder.row(KeyboardButton(text="📅 Boshqa kun statistikasi"))
     builder.row(KeyboardButton(text="👥 Foydalanuvchilar"))
-    builder.row(KeyboardButton(text="📨 Xabar yuborish"))
+    builder.row(KeyboardButton(text="🔙 Orqaga"))
     return builder.as_markup(resize_keyboard=True)
 
 
