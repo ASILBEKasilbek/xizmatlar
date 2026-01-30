@@ -1,6 +1,3 @@
-"""
-Klaviatura funksiyalari - Barcha tugmalar
-"""
 from aiogram.types import (
     KeyboardButton, 
     InlineKeyboardButton,
@@ -9,14 +6,9 @@ from aiogram.types import (
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from config import config
 
-
-# ===== KANALGA OBUNA KLAVIATURASI =====
-
 def subscription_keyboard():
-    """Kanalga obuna bo'lish klaviaturasi"""
     builder = InlineKeyboardBuilder()
     
-    # Kanal linkini yaratish
     channel_link = config.CHANNEL_LINK or f"https://t.me/{config.CHANNEL_ID.replace('@', '')}"
     
     builder.row(
@@ -35,10 +27,7 @@ def subscription_keyboard():
     return builder.as_markup()
 
 
-# ===== ROL TANLASH =====
-
 def role_selection_keyboard():
-    """Rol tanlash klaviaturasi - Haydovchi yoki Yo'lovchi"""
     builder = InlineKeyboardBuilder()
     
     builder.row(
@@ -51,10 +40,8 @@ def role_selection_keyboard():
     return builder.as_markup()
 
 
-# ===== TELEFON SO'RASH =====
 
 def request_phone_keyboard():
-    """Telefon raqamini so'rash klaviaturasi"""
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="📱 Telefon raqamimni yuborish", request_contact=True)
@@ -62,10 +49,8 @@ def request_phone_keyboard():
     return builder.as_markup(resize_keyboard=True)
 
 
-# ===== HUDUD TANLASH =====
 
 def area_selection_keyboard():
-    """Hudud tanlash klaviaturasi (Yo'lovchilar uchun)"""
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="Yangiqo'rgon"))
     builder.row(KeyboardButton(text="Boybuta"))
@@ -74,10 +59,8 @@ def area_selection_keyboard():
     return builder.as_markup(resize_keyboard=True)
 
 
-# ===== LOKATSIYA SO'RASH =====
 
 def request_location_keyboard():
-    """Lokatsiya yuborishni so'rash klaviaturasi"""
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)
@@ -85,23 +68,31 @@ def request_location_keyboard():
     return builder.as_markup(resize_keyboard=True)
 
 
-# ===== XIZMATLAR KLAVIATURASI (YO'LOVCHILAR) =====
-
 def services_keyboard():
-    """Xizmatlar klaviaturasi - Taxi, Non, Yem"""
     builder = ReplyKeyboardBuilder()
+
     builder.row(KeyboardButton(text="🚕 Taxi"))
-    builder.row(KeyboardButton(text="🥖 Non buyurtma berish"))
-    builder.row(KeyboardButton(text="🌾 Yem buyurtma berish"))
-    builder.row(KeyboardButton(text="💬 Qo'llab-quvvatlash"))
-    
+    builder.row(KeyboardButton(text="🥖 Non mahsulotlariga buyurtma berish"))
+    builder.row(KeyboardButton(text="🌾 Yem mahsulotlariga buyurtma berish"))
+
+    # 👇 yonma-yon bo‘lsin
+    builder.row(
+        KeyboardButton(text="💬 Qo'llab-quvvatlash"),
+        KeyboardButton(text="🔄 Qayta ro'yxatdan o'tish"),
+    )
+
     return builder.as_markup(resize_keyboard=True)
 
+def re_register_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Qayta ro'yxatdan o'tish", callback_data="re_register")
+    )
+    return builder.as_markup()
 
-# ===== BUYURTMA QABUL QILISH (GURUHDA) =====
+
 
 def accept_order_keyboard(order_id: int):
-    """Buyurtmani qabul qilish tugmasi - Guruhda ko'rsatiladi"""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -112,10 +103,7 @@ def accept_order_keyboard(order_id: int):
     return builder.as_markup()
 
 
-# ===== HAYDOVCHI TASDIQLASH/RAD ETISH =====
-
 def driver_action_keyboard(order_id: int):
-    """Haydovchi tasdiqlash/rad etish klaviaturasi"""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -130,10 +118,8 @@ def driver_action_keyboard(order_id: int):
     return builder.as_markup()
 
 
-# ===== ADMIN PANEL =====
 
 def admin_keyboard():
-    """Admin panel klaviaturasi"""
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="📊 Bugungi statistika"))
     builder.row(KeyboardButton(text="📅 Boshqa kun statistikasi"))
@@ -142,8 +128,38 @@ def admin_keyboard():
     return builder.as_markup(resize_keyboard=True)
 
 
-# ===== KLAVIATURANI O'CHIRISH =====
-
 def remove_keyboard():
-    """Klaviaturani o'chirish"""
     return ReplyKeyboardRemove()
+
+
+def channels_list_keyboard(channels: list[tuple[str, str]]):
+    builder = InlineKeyboardBuilder()
+    for name, channel_id in channels:
+        builder.row(InlineKeyboardButton(text=name, callback_data=f"ch:{channel_id}"))
+    return builder.as_markup()
+
+
+def users_list_keyboard(users, page: int, total_pages: int):
+    builder = InlineKeyboardBuilder()
+
+    for u in users:
+        title = f"{u.fullname} ({'🚖' if u.user_type=='driver' else '🧍‍♂️'})"
+        builder.row(
+            InlineKeyboardButton(
+                text=title,
+                callback_data=f"admin_user:{u.user_id}"
+            )
+        )
+
+    nav = []
+    if page > 1:
+        nav.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"admin_users_page:{page-1}"))
+    nav.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+    if page < total_pages:
+        nav.append(InlineKeyboardButton(text="➡️ Keyingi", callback_data=f"admin_users_page:{page+1}"))
+
+    builder.row(*nav)
+
+    builder.row(InlineKeyboardButton(text="🔙 Admin panel", callback_data="admin_back"))
+
+    return builder.as_markup()

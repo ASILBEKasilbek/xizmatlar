@@ -119,9 +119,8 @@ async def taxi_order_handler(message: Message, state: FSMContext):
         await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
 
-@router.message(F.text == "🥖 Non buyurtma berish")
+@router.message(F.text == "🥖 Non mahsulotlariga buyurtma berish")
 async def bread_order_handler(message: Message, state: FSMContext):
-    """Non buyurtma berish"""
     try:
         user_id = message.from_user.id
         
@@ -205,9 +204,8 @@ async def bread_order_handler(message: Message, state: FSMContext):
         await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
 
-@router.message(F.text == "🌾 Yem buyurtma berish")
+@router.message(F.text == "🌾 Yem mahsulotlariga buyurtma berish")
 async def feed_order_handler(message: Message, state: FSMContext):
-    """Yem buyurtma berish"""
     try:
         user_id = message.from_user.id
         

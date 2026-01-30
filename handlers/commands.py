@@ -1,6 +1,4 @@
-"""
-Commands handler - /active, /status, /cleanup
-"""
+
 import logging
 from datetime import datetime
 from aiogram import Router
@@ -17,7 +15,6 @@ router = Router()
 
 @router.message(Command("active"))
 async def cmd_active(message: Message, state: FSMContext):
-    """/active - Aktiv buyurtmalarni ko'rish"""
     try:
         user_id = message.from_user.id
         
@@ -32,7 +29,6 @@ async def cmd_active(message: Message, state: FSMContext):
                 return
             
             if user.user_type == "driver":
-                # Haydovchi uchun - accepted orderini ko'rsatish
                 order = db_manager.get_driver_active_order(db, user_id)
                 
                 if not order:
@@ -55,7 +51,6 @@ async def cmd_active(message: Message, state: FSMContext):
                 await message.answer(text)
             
             elif user.user_type == "passenger":
-                # Yo'lovchi uchun - waiting yoki accepted taxi orderini ko'rsatish
                 order = db_manager.get_active_taxi_order(db, user_id)
                 
                 if not order:
@@ -96,7 +91,6 @@ async def cmd_active(message: Message, state: FSMContext):
 
 @router.message(Command("status"))
 async def cmd_status(message: Message, state: FSMContext):
-    """/status - Bot statistikasi (faqat admin)"""
     try:
         user_id = message.from_user.id
         
@@ -161,7 +155,6 @@ async def cmd_cleanup(message: Message, state: FSMContext):
         
         db = get_db()
         try:
-            # Tozalash
             db_manager.cleanup_old_data(db)
             
             text = (

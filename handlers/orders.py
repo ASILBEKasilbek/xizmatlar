@@ -1,6 +1,3 @@
-"""
-Orders handler - Buyurtmalarni qabul qilish, tasdiqlash, rad etish
-"""
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
@@ -15,26 +12,18 @@ router = Router()
 
 @router.callback_query(F.data.startswith("accept_"))
 async def accept_order_callback(callback: CallbackQuery):
-    """
-    Buyurtmani qabul qilish (haydovchi)
-    - Guruhda "✅ Qabul qilish" tugmasi bosilganda
-    - 2 haydovchi bir vaqtda qabul qila olmaydi
-    - Qabul qilingach guruh xabari o'chiriladi
-    """
     try:
         order_id = int(callback.data.split("_")[1])
         driver_id = callback.from_user.id
         
         db = get_db()
         try:
-            # Haydovchini tekshirish
             driver = db_manager.get_user(db, driver_id)
             
             if not driver or driver.user_type != "driver":
                 await callback.answer("❌ Faqat haydovchilar buyurtma qabul qilishi mumkin!", show_alert=True)
                 return
             
-            # Buyurtmani olish
             order = db_manager.get_order(db, order_id)
             
             if not order:
@@ -45,7 +34,6 @@ async def accept_order_callback(callback: CallbackQuery):
                 await callback.answer("❌ Bu buyurtma allaqachon qabul qilingan!", show_alert=True)
                 return
             
-            # Haydovchida boshqa aktiv buyurtma bormi
             driver_active_order = db_manager.get_driver_active_order(db, driver_id)
             
             if driver_active_order:
@@ -55,14 +43,12 @@ async def accept_order_callback(callback: CallbackQuery):
                 )
                 return
             
-            # Guruh xabarini o'chirish
             try:
                 if order.group_message_id:
                     await callback.bot.delete_message(order.group_chat, order.group_message_id)
             except Exception as e:
                 logger.error(f"Error deleting group message: {e}")
             
-            # Buyurtmani update qilish
             db_manager.update_order_status(
                 db=db,
                 order_id=order_id,
@@ -71,7 +57,6 @@ async def accept_order_callback(callback: CallbackQuery):
                 driver_name=driver.fullname
             )
             
-            # GROUP3 ga info yuborish
             info_text = f"✅ Buyurtma #{order_id} {driver.fullname} ga yuborildi."
             try:
                 await callback.bot.send_message(config.GROUP3, info_text)

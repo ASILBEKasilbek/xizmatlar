@@ -1,20 +1,18 @@
-"""
-Registration handler - Haydovchi va Yo'lovchi ro'yxatdan o'tish
-"""
 import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from states import DriverRegistration, PassengerRegistration
 from database import get_db, db_manager
+
 from keyboards import (
     request_phone_keyboard, 
-    request_location_keyboard,
     services_keyboard, 
     area_selection_keyboard,
-    remove_keyboard
+    remove_keyboard,
+    re_register_keyboard,   
+    role_selection_keyboard
 )
-
 
 from utils import validate_fullname, validate_phone, format_phone
 from config import config
@@ -23,22 +21,15 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
-
-# ===== ROL TANLASH =====
-
 @router.callback_query(F.data == "role_driver")
 async def role_driver_callback(callback: CallbackQuery, state: FSMContext):
-    """Haydovchi rol tanlandi"""
     try:
         user_id = callback.from_user.id
-        
-        # Database'da allaqachon bor ekanligini tekshirish
         db = get_db()
         try:
             user = db_manager.get_user(db, user_id)
             
             if user:
-                # Allaqachon ro'yxatdan o'tgan
                 await callback.answer(
                     f"❌ Siz allaqachon {user.user_type} sifatida ro'yxatdan o'tgansiz!\n"
                     f"Bitta foydalanuvchi faqat bitta rol tanlashi mumkin.",
@@ -48,7 +39,6 @@ async def role_driver_callback(callback: CallbackQuery, state: FSMContext):
         finally:
             db.close()
         
-        # Ro'yxatdan o'tish boshlash
         await callback.answer("✅ Haydovchi ro'yxatdan o'tish")
         
         text = (
@@ -71,17 +61,13 @@ async def role_driver_callback(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "role_passenger")
 async def role_passenger_callback(callback: CallbackQuery, state: FSMContext):
-    """Yo'lovchi rol tanlandi"""
     try:
         user_id = callback.from_user.id
-        
-        # Database'da allaqachon bor ekanligini tekshirish
         db = get_db()
         try:
             user = db_manager.get_user(db, user_id)
             
             if user:
-                # Allaqachon ro'yxatdan o'tgan
                 await callback.answer(
                     f"❌ Siz allaqachon {user.user_type} sifatida ro'yxatdan o'tgansiz!\n"
                     f"Bitta foydalanuvchi faqat bitta rol tanlashi mumkin.",
@@ -90,8 +76,6 @@ async def role_passenger_callback(callback: CallbackQuery, state: FSMContext):
                 return
         finally:
             db.close()
-        
-        # Ro'yxatdan o'tish boshlash
         await callback.answer("✅ Yo'lovchi ro'yxatdan o'tish")
         
         text = (
@@ -100,8 +84,6 @@ async def role_passenger_callback(callback: CallbackQuery, state: FSMContext):
         )
         await callback.message.answer(text)
         await state.set_state(PassengerRegistration.waiting_for_fullname)
-        
-        # Eski xabarni o'chirish
         try:
             await callback.message.delete()
         except:
@@ -111,12 +93,8 @@ async def role_passenger_callback(callback: CallbackQuery, state: FSMContext):
         logger.error(f"Error in role_passenger_callback: {e}")
         await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
 
-
-# ===== HAYDOVCHI RO'YXATDAN O'TISH =====
-
 @router.message(DriverRegistration.waiting_for_fullname)
 async def driver_fullname_handler(message: Message, state: FSMContext):
-    """Haydovchi ism-familiya"""
     try:
         fullname = message.text.strip()
         
@@ -142,9 +120,7 @@ async def driver_fullname_handler(message: Message, state: FSMContext):
 
 @router.message(DriverRegistration.waiting_for_phone)
 async def driver_phone_handler(message: Message, state: FSMContext):
-    """Haydovchi telefon"""
     try:
-        # Contact orqali yuborilgan bo'lsa
         if message.contact:
             phone = message.contact.phone_number
             if not phone.startswith("+"):
@@ -174,7 +150,6 @@ async def driver_phone_handler(message: Message, state: FSMContext):
 
 @router.message(DriverRegistration.waiting_for_car_model)
 async def driver_car_model_handler(message: Message, state: FSMContext):
-    """Haydovchi mashina modeli"""
     try:
         car_model = message.text.strip()
         
@@ -186,14 +161,12 @@ async def driver_car_model_handler(message: Message, state: FSMContext):
             )
             return
         
-        # Ma'lumotlarni olish
         data = await state.get_data()
         fullname = data.get("fullname")
         phone = data.get("phone")
         user_id = message.from_user.id
         telegram_name = message.from_user.username or message.from_user.first_name
         
-        # Database'ga saqlash
         db = get_db()
         try:
             db_manager.create_user(
@@ -206,7 +179,6 @@ async def driver_car_model_handler(message: Message, state: FSMContext):
                 telegram_name=telegram_name
             )
             
-            # GROUP1 ga yuborish
             group_text = (
                 "🚖 <b>YANGI HAYDOVCHI</b>\n\n"
                 f"👤 Ism: {fullname}\n"
@@ -239,8 +211,6 @@ async def driver_car_model_handler(message: Message, state: FSMContext):
         await message.answer("❌ Xatolik yuz berdi. /start bosing.")
 
 
-# ===== YO'LOVCHI RO'YXATDAN O'TISH =====
-
 @router.message(PassengerRegistration.waiting_for_fullname)
 async def passenger_fullname_handler(message: Message, state: FSMContext):
     try:
@@ -264,42 +234,6 @@ async def passenger_fullname_handler(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Error in passenger_fullname_handler: {e}")
         await message.answer("❌ Xatolik yuz berdi. /start bosing.")
-
-
-# @router.message(PassengerRegistration.waiting_for_phone)
-# async def passenger_phone_handler(message: Message, state: FSMContext):
-#     """Yo'lovchi telefon"""
-#     try:
-#         # Contact orqali yuborilgan bo'lsa
-#         if message.contact:
-#             phone = message.contact.phone_number
-#             if not phone.startswith("+"):
-#                 phone = f"+{phone}"
-#         else:
-#             phone = message.text.strip() if message.text else ""
-        
-#         if not validate_phone(phone):
-#             await message.answer(
-#                 "❌ Telefon raqam noto'g'ri!\n"
-#                 "+998XXXXXXXXX yoki 9 xonali raqam kiriting.\n\n"
-#                 "Qaytadan kiriting:"
-#             )
-#             return
-        
-#         phone = format_phone(phone)
-#         await state.update_data(phone=phone)
-        
-#         text = (
-#             "📍 <b>Lokatsiyangizni yuboring</b>\n\n"
-#             "Iltimos, quyidagi tugma orqali yoki telegramdan lokatsiya yuboring:"
-#         )
-#         await message.answer(text, reply_markup=request_location_keyboard())
-#         await state.set_state(PassengerRegistration.waiting_for_location)
-    
-#     except Exception as e:
-#         logger.error(f"Error in passenger_phone_handler: {e}")
-#         await message.answer("❌ Xatolik yuz berdi. /start bosing.")
-
 
 @router.message(PassengerRegistration.waiting_for_phone)
 async def passenger_phone_handler(message: Message, state: FSMContext):
@@ -329,80 +263,6 @@ async def passenger_phone_handler(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Error in passenger_phone_handler: {e}")
         await message.answer("❌ Xatolik yuz berdi. /start bosing.")
-
-
-# @router.message(PassengerRegistration.waiting_for_location)
-# async def passenger_location_handler(message: Message, state: FSMContext):
-#     """Yo'lovchi lokatsiya"""
-#     try:
-#         # Lokatsiya yuborilganmi tekshirish
-#         if not message.location:
-#             await message.answer(
-#                 "❌ Iltimos, lokatsiya yuboring!\n\n"
-#                 "Quyidagi tugmani bosing yoki telegramdan lokatsiya yuboring."
-#             )
-#             return
-        
-#         latitude = str(message.location.latitude)
-#         longitude = str(message.location.longitude)
-        
-#         # Ma'lumotlarni olish
-#         data = await state.get_data()
-#         fullname = data.get("fullname")
-#         phone = data.get("phone")
-#         user_id = message.from_user.id
-#         telegram_name = message.from_user.username or message.from_user.first_name
-        
-#         # Database'ga saqlash
-#         db = get_db()
-#         try:
-#             db_manager.create_user(
-#                 db=db,
-#                 user_id=user_id,
-#                 fullname=fullname,
-#                 phone=phone,
-#                 user_type="passenger",
-#                 area=None,
-#                 latitude=latitude,
-#                 longitude=longitude,
-#                 telegram_name=telegram_name
-#             )
-            
-#             # GROUP2 ga yuborish (lokatsiya bilan)
-#             group_text = (
-#                 "🧍‍♂️ <b>YANGI YO'LOVCHI</b>\n\n"
-#                 f"👤 Ism: {fullname}\n"
-#                 f"📞 Tel: {phone}\n"
-#                 f"📍 Lokatsiya: {latitude}, {longitude}\n"
-#                 f"📱 Telegram: @{telegram_name}\n"
-#                 f"🆔 ID: {user_id}"
-#             )
-            
-#             try:
-#                 await message.bot.send_message(config.GROUP2, group_text)
-#             except Exception as e:
-#                 logger.error(f"Error sending to GROUP2: {e}")
-            
-#             # Foydalanuvchiga xabar
-#             success_text = (
-#                 "✅ <b>Ro'yxatdan o'tish muvaffaqiyatli tugadi!</b>\n\n"
-#                 f"👤 Ism: {fullname}\n"
-#                 f"📞 Telefon: {phone}\n"
-#                 f"📍 Lokatsiya saqlandi\n\n"
-#                 "Kerakli xizmatni tanlang:"
-#             )
-#             await message.answer(success_text, reply_markup=services_keyboard())
-            
-#         finally:
-#             db.close()
-        
-#         # State'ni tozalash
-#         await state.clear()
-    
-#     except Exception as e:
-#         logger.error(f"Error in passenger_area_handler: {e}")
-#         await message.answer("❌ Xatolik yuz berdi. /start bosing.")
-
 
 
 @router.message(PassengerRegistration.waiting_for_area)
@@ -466,4 +326,28 @@ async def passenger_area_handler(message: Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Error in passenger_area_handler: {e}")
+        await message.answer("❌ Xatolik yuz berdi. /start bosing.")
+
+
+
+@router.message(F.text == "🔄 Qayta ro'yxatdan o'tish")
+async def re_register_message(message: Message, state: FSMContext):
+    try:
+        user_id = message.from_user.id
+
+        await state.clear()
+
+        db = get_db()
+        try:
+            db_manager.delete_user(db, user_id)
+        finally:
+            db.close()
+
+        text = (
+            "🔄 <b>Qayta ro'yxatdan o'tish</b>\n\n"
+            "Kim sifatida ro'yxatdan o'tasiz?"
+        )
+        await message.answer(text, reply_markup=role_selection_keyboard())
+
+    except Exception as e:
         await message.answer("❌ Xatolik yuz berdi. /start bosing.")

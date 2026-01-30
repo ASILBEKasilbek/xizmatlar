@@ -1,6 +1,3 @@
-"""
-Ma'lumotlar bazasi - User, Order modellari va CRUD funksiyalari
-"""
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
@@ -298,5 +295,4 @@ class DatabaseManager:
             logger.error(f"❌ Error setting cooldown: {e}")
 
 
-# Global instance
 db_manager = DatabaseManager()

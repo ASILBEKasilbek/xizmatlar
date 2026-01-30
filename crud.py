@@ -1,8 +1,3 @@
-"""
-Database CRUD operatsiyalari
-Barcha ma'lumotlar bazasi operatsiyalarini shu yerda yo'litib yuborish
-"""
-
 from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session
@@ -10,11 +5,7 @@ from sqlalchemy import and_, or_, desc, func
 from database import User, Order, Statistics, CooldownTracker, AdminLog, SessionLocal
 from config import config, ServiceType, OrderStatus, UserRole
 
-
-# ==================== USER OPERATIONS ====================
-
 def get_user_by_telegram_id(db: Session, telegram_id: int) -> Optional[User]:
-    """Telegram ID bo'yicha foydalanuvchini olish"""
     return db.query(User).filter(User.telegram_id == telegram_id).first()
 
 
@@ -26,7 +17,6 @@ def create_user(
     role: str = UserRole.PASSENGER,
     phone_number: Optional[str] = None
 ) -> User:
-    """Yangi foydalanuvchi yaratish"""
     user = User(
         telegram_id=telegram_id,
         first_name=first_name,
@@ -41,7 +31,6 @@ def create_user(
 
 
 def update_user(db: Session, user_id: int, **kwargs) -> Optional[User]:
-    """Foydalanuvchi ma'lumotlarini yangilash"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if user:
         for key, value in kwargs.items():
@@ -54,7 +43,6 @@ def update_user(db: Session, user_id: int, **kwargs) -> Optional[User]:
 
 
 def get_all_drivers(db: Session, active_only: bool = True) -> List[User]:
-    """Barcha haydovchilarni olish"""
     query = db.query(User).filter(User.role == UserRole.DRIVER)
     if active_only:
         query = query.filter(User.is_active == True)
@@ -62,11 +50,7 @@ def get_all_drivers(db: Session, active_only: bool = True) -> List[User]:
 
 
 def get_all_passengers(db: Session) -> List[User]:
-    """Barcha yo'lovchilarni olish"""
     return db.query(User).filter(User.role == UserRole.PASSENGER).all()
-
-
-# ==================== ORDER OPERATIONS ====================
 
 def create_order(
     db: Session,
@@ -76,7 +60,6 @@ def create_order(
     description: Optional[str] = None,
     location: Optional[str] = None,
 ) -> Order:
-    """Yangi buyurtma yaratish"""
     order = Order(
         user_id=user_id,
         service_type=service_type,
@@ -92,12 +75,10 @@ def create_order(
 
 
 def get_order_by_id(db: Session, order_id: int) -> Optional[Order]:
-    """Order ID bo'yicha buyurtmani olish"""
     return db.query(Order).filter(Order.order_id == order_id).first()
 
 
 def get_active_taxi_order_for_user(db: Session, user_id: int) -> Optional[Order]:
-    """Foydalanuvchining faol taxi buyurtmasini olish"""
     return db.query(Order).filter(
         and_(
             Order.user_id == user_id,
@@ -108,7 +89,6 @@ def get_active_taxi_order_for_user(db: Session, user_id: int) -> Optional[Order]
 
 
 def get_active_orders_by_driver(db: Session, driver_id: int) -> List[Order]:
-    """Haydovchining barcha faol buyurtmalarini olish"""
     return db.query(Order).filter(
         and_(
             Order.driver_id == driver_id,
@@ -118,7 +98,6 @@ def get_active_orders_by_driver(db: Session, driver_id: int) -> List[Order]:
 
 
 def get_waiting_orders_by_service(db: Session, service_type: str) -> List[Order]:
-    """Service turini kutayotgan buyurtmalarni olish"""
     return db.query(Order).filter(
         and_(
             Order.service_type == service_type,
@@ -128,7 +107,6 @@ def get_waiting_orders_by_service(db: Session, service_type: str) -> List[Order]
 
 
 def accept_order(db: Session, order_id: int, driver_id: int, message_id: int, group_id: int) -> Optional[Order]:
-    """Haydovchi buyurtmani qabul qilish"""
     order = db.query(Order).filter(Order.order_id == order_id).first()
     if order and order.status == OrderStatus.WAITING:
         order.driver_id = driver_id
@@ -142,7 +120,6 @@ def accept_order(db: Session, order_id: int, driver_id: int, message_id: int, gr
 
 
 def decline_order(db: Session, order_id: int) -> Optional[Order]:
-    """Haydovchi buyurtmani rad etish"""
     order = db.query(Order).filter(Order.order_id == order_id).first()
     if order:
         order.declined_count = (order.declined_count or 0) + 1
@@ -152,13 +129,11 @@ def decline_order(db: Session, order_id: int) -> Optional[Order]:
 
 
 def confirm_order(db: Session, order_id: int) -> Optional[Order]:
-    """Buyurtmani tasdiqlash"""
     order = db.query(Order).filter(Order.order_id == order_id).first()
     if order:
         order.status = OrderStatus.CONFIRMED
         order.confirmed_at = datetime.utcnow()
         
-        # Haydovchi va yo'lovchi statistikasini yangilash
         if order.driver_id:
             driver = db.query(User).filter(User.user_id == order.driver_id).first()
             if driver:
@@ -197,7 +172,6 @@ def cancel_order(db: Session, order_id: int, reason: Optional[str] = None) -> Op
 
 
 def get_orders_by_date(db: Session, date: datetime) -> List[Order]:
-    """Sana bo'yicha buyurtmalarni olish"""
     start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day + timedelta(days=1)
     
@@ -209,18 +183,12 @@ def get_orders_by_date(db: Session, date: datetime) -> List[Order]:
     ).all()
 
 
-# ==================== COOLDOWN OPERATIONS ====================
-
 def can_place_order(db: Session, user_id: int, service_type: str) -> tuple[bool, Optional[str]]:
-    """Foydalanuvchi buyurtma berishga ruxsati borligini tekshirish"""
-    
-    # Taxi uchun: bitta faol buyurtma
     if service_type == ServiceType.TAXI:
         active_order = get_active_taxi_order_for_user(db, user_id)
         if active_order:
             return False, "Siz allaqachon faol taxi buyurtmaga egasiz! Avval uni bekor qiling."
     
-    # Non va Yem uchun: 3 soatlik cooldown
     if service_type in [ServiceType.BREAD, ServiceType.FEED]:
         cooldown = db.query(CooldownTracker).filter(
             and_(
@@ -241,7 +209,6 @@ def can_place_order(db: Session, user_id: int, service_type: str) -> tuple[bool,
 
 
 def set_cooldown(db: Session, user_id: int, service_type: str):
-    """Cooldown-ni o'rnatish"""
     cooldown = db.query(CooldownTracker).filter(
         and_(
             CooldownTracker.user_id == user_id,
@@ -261,11 +228,7 @@ def set_cooldown(db: Session, user_id: int, service_type: str):
     
     db.commit()
 
-
-# ==================== STATISTICS OPERATIONS ====================
-
 def get_daily_stats(db: Session, date: datetime) -> dict:
-    """Kunlik statistikani olish"""
     orders = get_orders_by_date(db, date)
     
     total = len(orders)
@@ -287,7 +250,6 @@ def get_daily_stats(db: Session, date: datetime) -> dict:
 
 
 def create_daily_stats(db: Session, user_id: Optional[int], stat_data: dict):
-    """Kunlik statistika yaratish"""
     stats = Statistics(
         user_id=user_id,
         stat_date=datetime.utcnow(),
@@ -297,10 +259,7 @@ def create_daily_stats(db: Session, user_id: Optional[int], stat_data: dict):
     db.commit()
 
 
-# ==================== ADMIN LOG ====================
-
 def log_admin_action(db: Session, admin_id: int, action: str, description: Optional[str] = None):
-    """Admin harakatlari logini yozish"""
     log_entry = AdminLog(
         admin_id=admin_id,
         action=action,

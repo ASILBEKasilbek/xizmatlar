@@ -1,6 +1,3 @@
-"""
-Main entry point - Bot ishga tushirish
-"""
 import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
@@ -8,14 +5,14 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# Modullarni import qilish
 from config import config
 from database import init_db
 from middlewares import SubscriptionMiddleware
 from scheduler import start_scheduler
-from handlers import start, registration, services, orders
+from handlers import start, registration, services, orders,admin
+from middlewares import BanCheckMiddleware
 
-# Logging sozlash
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -34,36 +31,29 @@ logger = logging.getLogger(__name__)
 
 
 async def on_startup(bot: Bot):
-    """Bot ishga tushganda"""
     try:
-        # Database'ni initsializatsiya qilish
         logger.info("Initializing database...")
         init_db()
         logger.info("✅ Database initialized successfully")
         
-        # Eski buyurtmalarni tekshirish va tiklash
         logger.info("Checking old orders...")
         from scheduler.startup_checks import check_old_orders_on_startup
         await check_old_orders_on_startup(bot)
         logger.info("✅ Old orders checked successfully")
         
-        # Scheduler'ni ishga tushirish
         logger.info("Starting scheduler...")
         start_scheduler(bot)
         logger.info("✅ Scheduler started successfully")
         
-        # Health check ishga tushirish
         logger.info("Starting health check...")
         from scheduler.startup_checks import health_check_loop
         import asyncio
         asyncio.create_task(health_check_loop(bot), name="health_check_task")
         logger.info("✅ Health check started successfully")
         
-        # Bot ma'lumotlarini olish
         bot_info = await bot.me()
         logger.info(f"✅ Bot started: @{bot_info.username} (ID: {bot_info.id})")
         
-        # Adminlarga xabar yuborish
         for admin_id in config.ADMIN_IDS:
             try:
                 await bot.send_message(
@@ -85,11 +75,9 @@ async def on_startup(bot: Bot):
 
 
 async def on_shutdown(bot: Bot):
-    """Bot to'xtaganda"""
     try:
         logger.info("Shutting down bot...")
         
-        # Adminlarga xabar yuborish
         for admin_id in config.ADMIN_IDS:
             try:
                 await bot.send_message(
@@ -106,9 +94,7 @@ async def on_shutdown(bot: Bot):
 
 
 async def main():
-    """Asosiy funksiya"""
     try:
-        # Bot va Dispatcher yaratish
         bot = Bot(
             token=config.BOT_TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -116,22 +102,21 @@ async def main():
         
         dp = Dispatcher()
         
-        # Middleware'larni qo'shish
-        # Subscription middleware faqat private chat uchun
         dp.message.middleware(SubscriptionMiddleware())
         dp.callback_query.middleware(SubscriptionMiddleware())
         
-        # Router'larni qo'shish
+        dp.message.middleware(BanCheckMiddleware())
+        dp.callback_query.middleware(BanCheckMiddleware())
+
         dp.include_router(start.router)
         dp.include_router(registration.router)
         dp.include_router(services.router)
         dp.include_router(orders.router)
+        dp.include_router(admin.router)
         
-        # Startup va shutdown handlerlar
         dp.startup.register(on_startup)
         dp.shutdown.register(on_shutdown)
         
-        # Polling boshlash
         logger.info("Starting bot polling...")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     

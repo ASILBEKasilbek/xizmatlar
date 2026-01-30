@@ -1,16 +1,14 @@
-"""
-Database manager - CRUD operatsiyalari
-"""
+
 import logging
 from datetime import datetime, timedelta, date
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config import config
 from .models import Base, User, Order, ProductCooldown, DailyStats
+from sqlalchemy import create_engine, func
 
 logger = logging.getLogger(__name__)
 
-# Database yaratish
 engine = create_engine(
     config.DATABASE_URL,
     connect_args={"check_same_thread": False} if "sqlite" in config.DATABASE_URL else {},
@@ -21,7 +19,6 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def init_db():
-    """Database jadvallarini yaratish"""
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Database initialized successfully")
@@ -31,18 +28,12 @@ def init_db():
 
 
 def get_db() -> Session:
-    """Database session olish"""
     return SessionLocal()
 
 
 class DatabaseManager:
-    """Ma'lumotlar bazasi bilan ishlash uchun barcha funksiyalar"""
-    
-    # ===== USER OPERATIONS =====
-    
     @staticmethod
     def get_user(db: Session, user_id: int) -> User:
-        """Foydalanuvchini olish"""
         return db.query(User).filter(User.user_id == user_id).first()
     
     @staticmethod
@@ -58,7 +49,6 @@ class DatabaseManager:
         longitude: str = None,
         telegram_name: str = None
     ) -> User:
-        """Yangi foydalanuvchi yaratish"""
         try:
             user = User(
                 user_id=user_id,
@@ -82,17 +72,29 @@ class DatabaseManager:
             raise
     
     @staticmethod
+    def delete_user(db: Session, user_id: int) -> bool:
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                return False
+
+            db.delete(user)
+            db.commit()
+            logger.info(f"✅ User deleted: {user_id}")
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Error deleting user: {e}")
+            raise
+
+    @staticmethod
     def get_all_drivers(db: Session):
-        """Barcha haydovchilarni olish"""
         return db.query(User).filter(User.user_type == "driver").all()
     
     @staticmethod
     def get_all_passengers(db: Session):
-        """Barcha yo'lovchilarni olish"""
         return db.query(User).filter(User.user_type == "passenger").all()
-    
-    # ===== ORDER OPERATIONS =====
-    
+
     @staticmethod
     def create_order(
         db: Session, 
@@ -103,7 +105,6 @@ class DatabaseManager:
         service_type: str, 
         group_chat: str
     ) -> Order:
-        """Yangi buyurtma yaratish"""
         try:
             order = Order(
                 passenger_id=passenger_id,
@@ -126,12 +127,10 @@ class DatabaseManager:
     
     @staticmethod
     def get_order(db: Session, order_id: int) -> Order:
-        """Buyurtmani ID bo'yicha olish"""
         return db.query(Order).filter(Order.order_id == order_id).first()
     
     @staticmethod
     def get_active_taxi_order(db: Session, passenger_id: int) -> Order:
-        """Yo'lovchining aktiv taxi buyurtmasini olish"""
         return db.query(Order).filter(
             Order.passenger_id == passenger_id,
             Order.service_type == "🚕 Taxi",
@@ -140,7 +139,6 @@ class DatabaseManager:
     
     @staticmethod
     def get_driver_active_order(db: Session, driver_id: int) -> Order:
-        """Haydovchining aktiv buyurtmasini olish"""
         return db.query(Order).filter(
             Order.driver_id == driver_id,
             Order.status == "accepted"
@@ -154,7 +152,6 @@ class DatabaseManager:
         driver_id: int = None, 
         driver_name: str = None
     ):
-        """Buyurtma statusini yangilash"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -179,7 +176,6 @@ class DatabaseManager:
     
     @staticmethod
     def increment_reject_count(db: Session, order_id: int):
-        """Buyurtma rad etilishlar sonini oshirish"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -193,7 +189,6 @@ class DatabaseManager:
     
     @staticmethod
     def update_order_group_message(db: Session, order_id: int, message_id: int):
-        """Buyurtmaning guruh xabar ID'sini saqlash"""
         try:
             order = db.query(Order).filter(Order.order_id == order_id).first()
             if order:
@@ -202,12 +197,9 @@ class DatabaseManager:
         except Exception as e:
             db.rollback()
             logger.error(f"❌ Error updating group message ID: {e}")
-    
-    # ===== COOLDOWN OPERATIONS =====
-    
+
     @staticmethod
     def check_product_cooldown(db: Session, user_id: int, product_type: str) -> bool:
-        """Non/Yem uchun 3 soatlik cheklovni tekshirish"""
         cooldown = db.query(ProductCooldown).filter(
             ProductCooldown.user_id == user_id,
             ProductCooldown.product_type == product_type
@@ -224,7 +216,6 @@ class DatabaseManager:
     
     @staticmethod
     def get_remaining_cooldown_time(db: Session, user_id: int, product_type: str) -> int:
-        """Qolgan cheklov vaqtini (soniyalarda) olish"""
         cooldown = db.query(ProductCooldown).filter(
             ProductCooldown.user_id == user_id,
             ProductCooldown.product_type == product_type
@@ -240,7 +231,6 @@ class DatabaseManager:
     
     @staticmethod
     def set_product_cooldown(db: Session, user_id: int, product_type: str):
-        """Non/Yem buyurtma berganidan keyin cooldown o'rnatish"""
         try:
             cooldown = db.query(ProductCooldown).filter(
                 ProductCooldown.user_id == user_id,
@@ -262,12 +252,9 @@ class DatabaseManager:
         except Exception as e:
             db.rollback()
             logger.error(f"❌ Error setting cooldown: {e}")
-    
-    # ===== STATISTIKA OPERATIONS =====
-    
+   
     @staticmethod
     def get_daily_stats(db: Session, target_date: date = None):
-        """Kunlik statistikani olish"""
         if target_date is None:
             target_date = date.today()
         
@@ -278,11 +265,9 @@ class DatabaseManager:
     
     @staticmethod
     def update_stats_order_created(db: Session, user_id: int, user_name: str):
-        """Buyurtma yaratilganda statistikani yangilash"""
         try:
             today = date.today()
             
-            # Yo'lovchi statistikasi
             stats = db.query(DailyStats).filter(
                 DailyStats.date >= datetime.combine(today, datetime.min.time()),
                 DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
@@ -312,11 +297,9 @@ class DatabaseManager:
     
     @staticmethod
     def update_stats_order_confirmed(db: Session, driver_id: int, driver_name: str):
-        """Buyurtma tasdiqlanganda statistikani yangilash"""
         try:
             today = date.today()
             
-            # Haydovchi statistikasi
             stats = db.query(DailyStats).filter(
                 DailyStats.date >= datetime.combine(today, datetime.min.time()),
                 DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
@@ -346,11 +329,9 @@ class DatabaseManager:
     
     @staticmethod
     def update_stats_order_rejected(db: Session, driver_id: int, driver_name: str):
-        """Buyurtma rad etilganda statistikani yangilash"""
         try:
             today = date.today()
             
-            # Haydovchi statistikasi
             stats = db.query(DailyStats).filter(
                 DailyStats.date >= datetime.combine(today, datetime.min.time()),
                 DailyStats.date < datetime.combine(today + timedelta(days=1), datetime.min.time()),
@@ -377,8 +358,54 @@ class DatabaseManager:
         except Exception as e:
             db.rollback()
             logger.error(f"❌ Error updating stats: {e}")
+    @staticmethod
+    def get_users_page(db: Session, page: int = 1, limit: int = 10):
+        """Userlarni pagination bilan olish"""
+        if page < 1:
+            page = 1
+        offset = (page - 1) * limit
 
+        total = db.query(func.count(User.user_id)).scalar() or 0
+        users = (
+            db.query(User)
+            .order_by(User.user_id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        total_pages = (total + limit - 1) // limit if total else 1
+        return users, total, total_pages
 
-db_manager = DatabaseManager()
-# Global instance
+    @staticmethod
+    def get_user_total_stats(db: Session, user_id: int):
+        res = (
+            db.query(
+                func.coalesce(func.sum(DailyStats.orders_count), 0),
+                func.coalesce(func.sum(DailyStats.confirmed_count), 0),
+                func.coalesce(func.sum(DailyStats.rejected_count), 0),
+            )
+            .filter(DailyStats.user_id == user_id)
+            .first()
+        )
+
+        orders, confirmed, rejected = res if res else (0, 0, 0)
+        return int(orders), int(confirmed), int(rejected)
+
+    @staticmethod
+    def set_user_ban(db: Session, user_id: int, banned: bool) -> bool:
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                return False
+            user.is_banned = banned
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def is_user_banned(db: Session, user_id: int) -> bool:
+        user = db.query(User).filter(User.user_id == user_id).first()
+        return bool(user and getattr(user, "is_banned", False))
 db_manager = DatabaseManager()

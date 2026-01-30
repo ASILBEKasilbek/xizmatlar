@@ -1,6 +1,3 @@
-"""
-Start handler - /start komandasi va obuna tekshiruvi
-"""
 import logging
 from aiogram import Router, F
 from aiogram.filters import CommandStart
@@ -18,29 +15,14 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    """
-    /start komandasi
-    1. FSM state'ni tozalash
-    2. Admin ekanligini tekshirish
-    3. Obuna tekshirish (admin bo'lmasa)
-    4. Database'dan foydalanuvchini tekshirish
-    5. Rol tanlash yoki xizmatlar klaviaturasini ko'rsatish
-    """
     try:
         user_id = message.from_user.id
-        
-        # FSM state'ni tozalash
         await state.clear()
-        
-        # Admin ekanligini tekshirish
         is_admin = user_id in config.ADMIN_IDS
-        
-        # Admin bo'lmasa obunani tekshirish
         if not is_admin:
             is_subscribed = await check_subscription(message.bot, user_id)
             
             if not is_subscribed:
-                # Obuna bo'lmagan
                 text = (
                     f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
                     "❗️ Botdan foydalanish uchun avval kanalga obuna bo'lishingiz kerak!\n\n"
@@ -49,13 +31,11 @@ async def cmd_start(message: Message, state: FSMContext):
                 await message.answer(text, reply_markup=subscription_keyboard())
                 return
         
-        # Database'dan foydalanuvchini tekshirish
         db = get_db()
         try:
             user = db_manager.get_user(db, user_id)
             
             if user:
-                # Ro'yxatdan o'tgan foydalanuvchi
                 if user.user_type == "driver":
                     text = (
                         f"👋 Xush kelibsiz, {user.fullname}!\n\n"
@@ -78,7 +58,6 @@ async def cmd_start(message: Message, state: FSMContext):
                     await message.answer(text, reply_markup=services_keyboard())
             
             else:
-                # Yangi foydalanuvchi - rol tanlash
                 text = (
                     f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
                     "🚖 Xizmatlar botiga xush kelibsiz!\n\n"
@@ -96,19 +75,12 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription_callback(callback: CallbackQuery, state: FSMContext):
-    """
-    Obunani tekshirish callback
-    - Kanalga obuna bo'lganmi tekshiradi
-    - Agar obuna bo'lgan bo'lsa, /start kabi davom etadi
-    """
     try:
         user_id = callback.from_user.id
         
-        # Obunani tekshirish
         is_subscribed = await check_subscription(callback.bot, user_id)
         
         if not is_subscribed:
-            # Hali obuna bo'lmagan
             await callback.answer(
                 "❗️ Siz hali kanalga obuna bo'lmadingiz!\n"
                 "Kanalga obuna bo'lgandan keyin qaytadan \"✅ Tasdiqlash\" tugmasini bosing.",
@@ -116,16 +88,13 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
             )
             return
         
-        # Obuna bo'lgan - davom ettirish
         await callback.answer("✅ Obuna tasdiqlandi!")
         
-        # Database'dan foydalanuvchini tekshirish
         db = get_db()
         try:
             user = db_manager.get_user(db, user_id)
             
             if user:
-                # Ro'yxatdan o'tgan
                 if user.user_type == "driver":
                     text = (
                         f"👋 Xush kelibsiz, {user.fullname}!\n\n"
@@ -147,7 +116,6 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
                     await callback.message.answer(text, reply_markup=services_keyboard())
             
             else:
-                # Yangi foydalanuvchi - rol tanlash
                 text = (
                     f"👋 Assalomu alaykum, {callback.from_user.first_name}!\n\n"
                     "🚖 Xizmatlar botiga xush kelibsiz!\n\n"
@@ -158,7 +126,6 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
         finally:
             db.close()
         
-        # Eski xabarni o'chirish
         try:
             await callback.message.delete()
         except:

@@ -1,6 +1,3 @@
-"""
-Keyboards moduli - Barcha klaviaturalar
-"""
 from .buttons import (
     subscription_keyboard,
     role_selection_keyboard,
@@ -11,7 +8,10 @@ from .buttons import (
     accept_order_keyboard,
     driver_action_keyboard,
     admin_keyboard,
-    remove_keyboard
+    remove_keyboard,
+    re_register_keyboard,
+    channels_list_keyboard,
+    users_list_keyboard
 )
 
 __all__ = [
@@ -24,5 +24,8 @@ __all__ = [
     'accept_order_keyboard',
     'driver_action_keyboard',
     'admin_keyboard',
-    'remove_keyboard'
+    'remove_keyboard',
+    're_register_keyboard',
+    'channels_list_keyboard',
+    'users_list_keyboard'
 ]

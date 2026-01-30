@@ -1,6 +1,3 @@
-"""
-Handlers moduli - Barcha handlerlar
-"""
-from . import start, registration, services, orders
+from . import start, registration, services, orders, admin
 
-__all__ = ['start', 'registration', 'services', 'orders']
+__all__ = ['start', 'registration', 'services', 'orders', 'admin']

@@ -1,6 +1,3 @@
-"""
-Webhook ni o'chirish uchun yordamchi skript
-"""
 import asyncio
 from aiogram import Bot
 from config import config
