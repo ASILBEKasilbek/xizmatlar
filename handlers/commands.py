@@ -117,15 +117,15 @@ async def cmd_status(message: Message, state: FSMContext):
             text = (
                 "📊 <b>BOT STATISTIKASI</b>\n\n"
                 f"👥 <b>Foydalanuvchilar:</b>\n"
-                f"• Jami: {users_count}\n"
-                f"• Haydovchilar: {drivers_count}\n"
-                f"• Yo'lovchilar: {passengers_count}\n\n"
+                f"Jami: {users_count}\n"
+                f"Haydovchilar: {drivers_count}\n"
+                f"Yo'lovchilar: {passengers_count}\n\n"
                 f"📋 <b>Buyurtmalar:</b>\n"
-                f"• Jami: {orders_count}\n"
-                f"• Kutilmoqda: {waiting_orders}\n"
-                f"• Qabul qilingan: {accepted_orders}\n"
-                f"• Tasdiqlangan: {confirmed_orders}\n"
-                f"• Bekor qilingan: {cancelled_orders}\n\n"
+                f"Jami: {orders_count}\n"
+                f"Kutilmoqda: {waiting_orders}\n"
+                f"Qabul qilingan: {accepted_orders}\n"
+                f"Tasdiqlangan: {confirmed_orders}\n"
+                f"Bekor qilingan: {cancelled_orders}\n\n"
                 f"⏰ Vaqt: {datetime.utcnow().strftime('%d.%m.%Y %H:%M')}"
             )
             
@@ -160,9 +160,9 @@ async def cmd_cleanup(message: Message, state: FSMContext):
             text = (
                 "✅ <b>Tozalash tugallandi!</b>\n\n"
                 "Quyidagi ma'lumotlar o'chirildi:\n"
-                "• 30 kundan eski product cooldownlar\n"
-                "• 90 kundan eski tugallangan/bekor qilingan buyurtmalar\n"
-                "• 90 kundan eski statistikalar"
+                "30 kundan eski product cooldownlar\n"
+                "90 kundan eski tugallangan/bekor qilingan buyurtmalar\n"
+                "90 kundan eski statistikalar"
             )
             
             await message.answer(text)

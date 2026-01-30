@@ -1,6 +1,3 @@
-"""
-Taymerlar - 7 va 6 daqiqalik timeout'lar
-"""
 import asyncio
 import logging
 from datetime import datetime, timedelta
@@ -12,35 +9,27 @@ logger = logging.getLogger(__name__)
 
 
 async def check_waiting_orders(bot: Bot):
-    """
-    7 daqiqalik taymerni tekshirish
-    - Hech kim bosmasa buyurtma yopiladi
-    - Waiting statusdagi buyurtmalarni tekshiradi
-    """
+
     db = get_db()
     try:
-        # Barcha waiting statusdagi buyurtmalarni olish
         waiting_orders = db.query(Order).filter(
             Order.status == "waiting",
             Order.service_type == "🚕 Taxi"
         ).all()
         
         for order in waiting_orders:
-            # 7 daqiqa o'tganmi?
             time_diff = datetime.utcnow() - order.created_at
             
             if time_diff >= timedelta(seconds=config.GROUP_TIMEOUT):
-                # 7 daqiqa o'tgan - buyurtmani yopish
+                
                 db_manager.update_order_status(db, order.order_id, "cancelled")
                 
-                # Guruh xabarini o'chirish
                 try:
                     if order.group_message_id:
                         await bot.delete_message(order.group_chat, order.group_message_id)
                 except Exception as e:
                     logger.error(f"Error deleting group message: {e}")
                 
-                # GROUP3 ga xabar
                 try:
                     await bot.send_message(
                         config.GROUP3,
@@ -49,7 +38,6 @@ async def check_waiting_orders(bot: Bot):
                 except Exception as e:
                     logger.error(f"Error sending timeout message to GROUP3: {e}")
                 
-                # Yo'lovchiga xabar
                 try:
                     await bot.send_message(
                         order.passenger_id,
@@ -68,31 +56,21 @@ async def check_waiting_orders(bot: Bot):
 
 
 async def check_accepted_orders(bot: Bot):
-    """
-    6 daqiqalik taymerni tekshirish
-    - Haydovchi jim bo'lsa avtomatik rad bo'ladi
-    - Accepted statusdagi buyurtmalarni tekshiradi
-    """
     db = get_db()
     try:
-        # Barcha accepted statusdagi buyurtmalarni olish
         accepted_orders = db.query(Order).filter(
             Order.status == "accepted",
             Order.service_type == "🚕 Taxi"
         ).all()
         
         for order in accepted_orders:
-            # 6 daqiqa o'tganmi?
             time_diff = datetime.utcnow() - order.accepted_at
             
             if time_diff >= timedelta(seconds=config.ACCEPTED_TIMEOUT):
-                # 6 daqiqa o'tgan - avtomatik rad etish
                 db_manager.increment_reject_count(db, order.order_id)
                 
-                # Buyurtmani qayta olish (yangilangan reject_count bilan)
                 order = db_manager.get_order(db, order.order_id)
                 
-                # Haydovchiga xabar
                 try:
                     await bot.send_message(
                         order.driver_id,
@@ -104,10 +82,8 @@ async def check_accepted_orders(bot: Bot):
                     logger.error(f"Error sending timeout message to driver: {e}")
                 
                 if order.reject_count >= config.MAX_REJECT_COUNT:
-                    # 3 marta rad etilgan - butunlay bekor qilish
                     db_manager.update_order_status(db, order.order_id, "cancelled")
                     
-                    # Yo'lovchiga xabar
                     try:
                         await bot.send_message(
                             order.passenger_id,
@@ -119,7 +95,6 @@ async def check_accepted_orders(bot: Bot):
                     except Exception as e:
                         logger.error(f"Error sending cancellation to passenger: {e}")
                     
-                    # GROUP3 ga xabar
                     try:
                         await bot.send_message(
                             config.GROUP3,
@@ -129,7 +104,6 @@ async def check_accepted_orders(bot: Bot):
                         logger.error(f"Error sending cancellation to GROUP3: {e}")
                 
                 else:
-                    # 1-2 marta rad etilgan - qayta guruhga chiqarish
                     db_manager.update_order_status(
                         db, 
                         order.order_id, 
@@ -138,7 +112,6 @@ async def check_accepted_orders(bot: Bot):
                         driver_name=None
                     )
                     
-                    # Qayta GROUP3 ga yuborish
                     group_text = (
                         "🚕 <b>YANGI TAXI BUYURTMA</b>\n\n"
                         f"📋 Buyurtma ID: #{order.order_id}\n"
@@ -155,7 +128,6 @@ async def check_accepted_orders(bot: Bot):
                             reply_markup=accept_order_keyboard(order.order_id)
                         )
                         
-                        # Guruh xabar ID'sini saqlash
                         db_manager.update_order_group_message(db, order.order_id, group_msg.message_id)
                         
                     except Exception as e:
@@ -168,22 +140,14 @@ async def check_accepted_orders(bot: Bot):
 
 
 async def scheduler_loop(bot: Bot):
-    """
-    Asosiy scheduler loop
-    - Har 30 soniyada bir marta ishlaydi
-    - Waiting va accepted buyurtmalarni tekshiradi
-    """
     logger.info("✅ Scheduler started")
     
     while True:
         try:
-            # 7 daqiqalik taymerni tekshirish
             await check_waiting_orders(bot)
             
-            # 6 daqiqalik taymerni tekshirish
             await check_accepted_orders(bot)
             
-            # 30 soniya kutish
             await asyncio.sleep(30)
         
         except Exception as e:
@@ -192,6 +156,5 @@ async def scheduler_loop(bot: Bot):
 
 
 def start_scheduler(bot: Bot):
-    """Schedulerni ishga tushirish"""
     asyncio.create_task(scheduler_loop(bot))
     logger.info("✅ Scheduler task created")

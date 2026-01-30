@@ -1,6 +1,3 @@
-"""
-States moduli - FSM states
-"""
 from .registration import DriverRegistration, PassengerRegistration
 from .admin import AdminStates
 
