@@ -83,6 +83,16 @@ def services_keyboard():
 
     return builder.as_markup(resize_keyboard=True)
 
+def driver_re_register():
+    builder = ReplyKeyboardBuilder()
+    
+    builder.row(
+        KeyboardButton(text="💬 Qo'llab-quvvatlash"),
+        KeyboardButton(text="🔄 Qayta ro'yxatdan o'tish"),
+    )
+
+    return builder.as_markup(resize_keyboard=True)
+
 def re_register_keyboard():
     builder = InlineKeyboardBuilder()
     builder.row(

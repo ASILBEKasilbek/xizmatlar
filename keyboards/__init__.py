@@ -11,7 +11,8 @@ from .buttons import (
     remove_keyboard,
     re_register_keyboard,
     channels_list_keyboard,
-    users_list_keyboard
+    users_list_keyboard,
+    driver_re_register
 )
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     'remove_keyboard',
     're_register_keyboard',
     'channels_list_keyboard',
-    'users_list_keyboard'
+    'users_list_keyboard',
+    'driver_re_register'
 ]

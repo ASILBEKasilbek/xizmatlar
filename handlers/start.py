@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from database import get_db, db_manager
-from keyboards import subscription_keyboard, role_selection_keyboard, services_keyboard
+from keyboards import subscription_keyboard, role_selection_keyboard, services_keyboard,driver_re_register
 from utils import check_subscription
 from config import config
 
@@ -44,7 +44,7 @@ async def cmd_start(message: Message, state: FSMContext):
                         f"🚗 Mashina: {user.car_model}\n\n"
                         "Buyurtmalarni qabul qilish uchun adminga yozing. @SAT_mathuz\n"
                     )
-                    await message.answer(text)
+                    await message.answer(text, reply_markup=driver_re_register())
                 
                 elif user.user_type == "passenger":
                     text = (
@@ -100,7 +100,6 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
                         f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz.\n"
                         f"📱 Telefon: {user.phone}\n"
                         f"🚗 Mashina: {user.car_model}\n\n"
-                        # f"Buyurtmalar {config.GROUP3} guruhida keladi."
                     )
                     await callback.message.answer(text)
                 
