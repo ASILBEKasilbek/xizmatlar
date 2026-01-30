@@ -63,7 +63,6 @@ async def accept_order_callback(callback: CallbackQuery):
             except Exception as e:
                 logger.error(f"Error sending info to GROUP3: {e}")
             
-            # Haydovchiga PRIVATE ga yo'lovchi ma'lumotini TELEFON bilan yuborish
             private_text = (
                 "✅ <b>SIZ BUYURTMANI QABUL QILDINGIZ</b>\n\n"
                 f"📋 Buyurtma ID: #{order.order_id}\n"
@@ -111,17 +110,13 @@ async def confirm_order_callback(callback: CallbackQuery):
                 await callback.answer("❌ Bu buyurtma allaqachon yakunlangan!", show_alert=True)
                 return
 
-            # ✅ driver info (car rusumi) ni olish
             driver = db_manager.get_user(db, driver_id)
             driver_car_model = (driver.car_model if driver and driver.car_model else "Noma'lum")
 
-            # Buyurtmani tasdiqlash
             db_manager.update_order_status(db, order_id, "confirmed")
 
-            # Statistikani yangilash
             db_manager.update_stats_order_confirmed(db, driver_id, order.driver_name)
 
-            # Haydovchiga xabar
             await callback.message.edit_text(
                 f"✅ <b>TASDIQLANDI</b>\n\n"
                 f"👤 Yo'lovchi: {order.passenger_name}\n"
@@ -130,7 +125,6 @@ async def confirm_order_callback(callback: CallbackQuery):
                 f"Rahmat!"
             )
 
-            # Yo'lovchiga xabar
             passenger_text = (
                 f"✅ <b>Buyurtmangiz tasdiqlandi!</b>\n\n"
                 f"📋 Buyurtma ID: #{order_id}\n"
@@ -144,7 +138,6 @@ async def confirm_order_callback(callback: CallbackQuery):
             except Exception as e:
                 logger.error(f"Error sending confirmation to passenger: {e}")
 
-            # GROUP3 ga xabar
             try:
                 await callback.bot.send_message(
                     config.GROUP3,
@@ -172,7 +165,6 @@ async def reject_order_callback(callback: CallbackQuery):
         
         db = get_db()
         try:
-            # Buyurtmani olish
             order = db_manager.get_order(db, order_id)
             
             if not order:
@@ -187,26 +179,20 @@ async def reject_order_callback(callback: CallbackQuery):
                 await callback.answer("❌ Bu buyurtma allaqachon yakunlangan!", show_alert=True)
                 return
             
-            # Rad etishlar sonini oshirish
             db_manager.increment_reject_count(db, order_id)
             
-            # Buyurtmani qayta olish (yangilangan reject_count bilan)
             order = db_manager.get_order(db, order_id)
             
-            # Statistikani yangilash
             db_manager.update_stats_order_rejected(db, driver_id, order.driver_name)
             
-            # Haydovchiga xabar
             await callback.message.edit_text(
                 f"❌ <b>Buyurtma #{order_id} rad etildi!</b>\n\n"
                 f"Buyurtma {order.reject_count} marta rad etildi."
             )
             
             if order.reject_count >= config.MAX_REJECT_COUNT:
-                # 3 marta rad etilgan - butunlay bekor qilish
                 db_manager.update_order_status(db, order_id, "cancelled")
                 
-                # Yo'lovchiga xabar
                 passenger_text = (
                     f"❌ <b>Buyurtmangiz bekor qilindi</b>\n\n"
                     f"📋 Buyurtma ID: #{order_id}\n"
@@ -218,7 +204,6 @@ async def reject_order_callback(callback: CallbackQuery):
                 except Exception as e:
                     logger.error(f"Error sending cancellation to passenger: {e}")
                 
-                # GROUP3 ga xabar
                 try:
                     await callback.bot.send_message(
                         config.GROUP3, 
@@ -228,7 +213,6 @@ async def reject_order_callback(callback: CallbackQuery):
                     logger.error(f"Error sending cancellation to GROUP3: {e}")
                 
             else:
-                # 1-2 marta rad etilgan - qayta guruhga chiqarish
                 db_manager.update_order_status(
                     db, 
                     order_id, 
@@ -237,7 +221,6 @@ async def reject_order_callback(callback: CallbackQuery):
                     driver_name=None
                 )
                 
-                # Qayta GROUP3 ga yuborish
                 group_text = (
                     "🚕 <b>YANGI TAXI BUYURTMA</b>\n\n"
                     f"📋 Buyurtma ID: #{order.order_id}\n"
@@ -254,7 +237,6 @@ async def reject_order_callback(callback: CallbackQuery):
                         reply_markup=accept_order_keyboard(order_id)
                     )
                     
-                    # Guruh xabar ID'sini saqlash
                     db_manager.update_order_group_message(db, order_id, group_msg.message_id)
                     
                 except Exception as e:

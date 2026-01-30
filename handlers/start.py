@@ -42,8 +42,7 @@ async def cmd_start(message: Message, state: FSMContext):
                         f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz.\n"
                         f"📱 Telefon: {user.phone}\n"
                         f"🚗 Mashina: {user.car_model}\n\n"
-                        f"Buyurtmalar {config.GROUP3} guruhida keladi.\n"
-                        f"Buyurtmani qabul qilish uchun guruhda \"✅ Qabul qilish\" tugmasini bosing."
+                        "Buyurtmalarni qabul qilish uchun adminga yozing. @SAT_mathuz\n"
                     )
                     await message.answer(text)
                 
@@ -101,7 +100,7 @@ async def check_subscription_callback(callback: CallbackQuery, state: FSMContext
                         f"🚖 Siz haydovchi sifatida ro'yxatdan o'tgansiz.\n"
                         f"📱 Telefon: {user.phone}\n"
                         f"🚗 Mashina: {user.car_model}\n\n"
-                        f"Buyurtmalar {config.GROUP3} guruhida keladi."
+                        # f"Buyurtmalar {config.GROUP3} guruhida keladi."
                     )
                     await callback.message.answer(text)
                 
