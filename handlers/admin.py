@@ -518,7 +518,6 @@ async def admin_users_page_callback(callback: CallbackQuery):
         await callback.answer("❌ Xatolik!", show_alert=True)
 
 
-
 @router.callback_query(F.data.startswith("admin_user:"))
 async def admin_user_detail_callback(callback: CallbackQuery):
     try:
@@ -527,10 +526,6 @@ async def admin_user_detail_callback(callback: CallbackQuery):
             return
 
         user_id = int(callback.data.split(":")[1])
-        is_banned = getattr(user, "is_banned", False)
-        ban_text = "✅ Unban qilish" if is_banned else "🚫 Ban qilish"
-        ban_cb = f"admin_toggle_ban:{user.user_id}"
-
 
         db = get_db()
         try:
@@ -542,6 +537,11 @@ async def admin_user_detail_callback(callback: CallbackQuery):
             orders, confirmed, rejected = db_manager.get_user_total_stats(db, user_id)
         finally:
             db.close()
+
+        # ✅ user bor bo‘lgandan keyin ishlatamiz
+        is_banned = getattr(user, "is_banned", False)
+        ban_text = "✅ Unban qilish" if is_banned else "🚫 Ban qilish"
+        ban_cb = f"admin_toggle_ban:{user.user_id}"
 
         role = "🚖 Haydovchi" if user.user_type == "driver" else "🧍‍♂️ Yo'lovchi"
         extra = ""
@@ -574,7 +574,6 @@ async def admin_user_detail_callback(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Error in admin_user_detail_callback: {e}")
         await callback.answer("❌ Xatolik!", show_alert=True)
-
 
 @router.callback_query(F.data == "admin_back")
 async def admin_back_callback(callback: CallbackQuery, state: FSMContext):

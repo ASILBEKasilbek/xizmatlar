@@ -134,7 +134,7 @@ def admin_keyboard():
     builder.row(KeyboardButton(text="📊 Bugungi statistika"))
     builder.row(KeyboardButton(text="📅 Boshqa kun statistikasi"))
     builder.row(KeyboardButton(text="👥 Foydalanuvchilar"))
-    builder.row(KeyboardButton(text="🔙 Orqaga"))
+    # builder.row(KeyboardButton(text="🔙 Orqaga"))
     return builder.as_markup(resize_keyboard=True)
 
 
